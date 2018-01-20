@@ -1,0 +1,19 @@
+Mbbbbbbbbbbbbbbbb ROW -
+b---------------b ROW 1
+b---------------b ROW 2
+b---------------b ROW 3
+b---------------b ROW 4
+b-------O-X-----b ROW 5
+b--------XOOO---b ROW 6
+b--------OX-X---b ROW 7
+b-------XOXO-X--b ROW 8
+b-------O-X-X---b ROW 9
+b---------OX----b ROW 10-
+b---------------b ROW 11
+b---------------b ROW 12
+b---------------b ROW 13
+b---------------b ROW 14
+b---------------b ROW 15
+Lbbbbbbbbbbbbbbbb ROW 16
+-ABCDEFGHIJKLMNO
+-
