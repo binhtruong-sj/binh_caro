@@ -31,20 +31,26 @@
 //#define oppositeVal(a) a^0x3
 #define oppositeVal(a) a==X_?O_:X_
 #define myTurn(a) a%2
+#define biasAdjust(favor_val, val,score,percent) (val == favor_val) ? ((score*percent)/100): score
+#define BIAS_PERCENT 105
+#define WIDTH 5
+#define PRINTSCORE 7
+
 /*
  * Line for the purpose of scoring
  */
-struct hEntry{
+
+struct hEntry {
 public:
 	int line;
 	int bitcnt;
 	int score;
 	int refcnt;
 };
-class hashTable{
+class hashTable {
 public:
 	hEntry arrayE[1000];
-	int arrayE_cnt=0;
+	int arrayE_cnt = 0;
 	hashTable();
 	void addEntry(int line, int cnt, int score);
 	void print();
@@ -52,9 +58,11 @@ public:
 class Line {
 public:
 	friend class hashTable;
-	int val=0;
-	int cnt=0;
-	int score=0;
+	int val = 0;
+	int cnt = 0;
+	int continuous;
+	int type; // X_ or O_ are being search
+	int score = 0;
 	int evaluate();
 	void print();
 };
@@ -75,10 +83,22 @@ public:
 class cell {
 public:
 	int val = 0;
-	int rowVal, colVal, score=0;
+	int rowVal, colVal, score = 0;
 	cell *near_ptr[8];
 	void print(int mode);
 	void print();
+};
+struct tscore {
+public:
+	int ts_cal, ts_ret;
+	cell *cellPtr;
+
+};
+
+class tsDebug {
+public:
+	tscore Array[10][10];
+	void print(int d, int w);
 };
 
 struct scoreElement {
@@ -96,21 +116,25 @@ struct scoreElement {
 class caro {
 	cell board[21][21];
 	int size = 17;
+
 	vector<scoreElement> aScoreArray;
 
-
 public:
+	int terminate;
+	int myVal = X_;
 	caro(int table_size);
 	virtual ~caro();
 	int setCell(int val, int x, int y, int near);
 	void setNEAR(int x, int y);
 	void setTNEAR(int x, int y);
 	void restoreCell(int val, int x, int y);
-    void clearScore();
+	void undo1move();
+	void clearScore();
 	Line extractLine(int dir, int x, int y);
 	int score1Cell(int setVal, int row, int col);
-	scoreElement evalAllCell(int val, int width, int depth);
-
+	scoreElement evalAllCell(int val, int width, int depth, int currentWidth);
+	scoreElement terminateScore;
+	void reset();
 	void print(int mode);
 	void print();
 };

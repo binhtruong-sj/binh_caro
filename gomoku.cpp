@@ -11,7 +11,7 @@
 using namespace std;
 #include "caro.h"
 #define convertToRow(a) isalpha(a)? (islower(a)? (a-'a'+1):(a-'A'+1)):1
-
+#define FLIP(a) ((a=a^1)? "ON":"OFF")
 /*
  * For the purpose of testing the code.  This is a textfile setting the game up
  * after setting,
@@ -60,8 +60,13 @@ int main() {
 	char name[4],testType[20];
 	FILE *finput;
 	Line tempLine;
+	int width=5;
+	int depth=5;
+	extern int search_depth, search_width, debugWidthAtDepth[20];
+	extern tsDebug aDebug;
+	extern int debugScoring,debugScoringE, debugHash, debugAI;
+	extern int debugRow, debugCol;
 extern	hashTable ahash;
-
 	//agame.print();
 #if 1
 	finput = fopen("testinput.txt","r");
@@ -108,51 +113,74 @@ extern	hashTable ahash;
 				int depth = row;
 				scoreElement result;
 				if(testType[1] =='X')
-					result = agame.evalAllCell(X_,width,depth); // width = dir; depth = row
+					result = agame.evalAllCell(X_,width,depth,0); // width = dir; depth = row
 				else
-					result = agame.evalAllCell(O_,width,depth);
+					result = agame.evalAllCell(O_,width,depth,0);
 				printf("Score=%x, row=%d, col=%C",result.val,(result.cellPtr)->rowVal,(result.cellPtr)->colVal-1+'A');
 				agame.print(SYMBOLMODE);
 				agame.print(SCOREMODE);
-			}else if(testType[0] =='g') {
+			}else if(testType[0] =='G') {
 				mode = 0;
-				caro newgame(15);
 				col = 1;
-				int width = 5;
-				int depth = 5;
+				cout << "Enter width, depth : " << endl;;
+				cin >> search_width >> search_depth;
+				agame.reset();
+				width = search_width;
+				depth = search_depth;
+
+			}else if(testType[0] =='g') {
 				while(col < 20){
-					cout << "Enter row col: " << endl;
-					scanf("%d %c",&row,name);
+					int redo =1;
+					do {
+						cout << "Enter row (-1 for undo, -2 for debug option) col: " << endl;
+					//	scanf("%d %c",&row,name);
+						cin >> row;
+						if(row < -1) {
+							printf("-2 debugScoring, -3 debugScoringE, -4 debugHash, -5 debugAI ");
+							cout << endl;
+							if(row == -2) {
+								cout << "Turn " << FLIP(debugScoring) << " debugScoring" << endl;
+								if(debugScoring){
+									cout << "Enter Debug Row Col:" ;
+									cin >> debugRow >> name;
+									debugCol = name[0]-'a'+1;
+								}
+								}
+							if(row == -3)
+								cout << "Turn " << FLIP(debugScoringE) << " debugScoringE" << endl;
+							if(row == -4)
+								cout << "Turn " << FLIP(debugHash) << " debugHash" << endl;
+							if(row == -5){
+								cout << "Turn " << FLIP(debugAI) << " debugAI" << endl;
+								if(debugAI) {
+										cout << "Enter the % of I at each Depth Search: " << endl;
+										for(int i=search_depth;i>=0;i--){
+											cin >> debugWidthAtDepth[i];
+										}
+								}
+							}
+						} else if(row == -1) {
+							agame.undo1move();
+							agame.print(SYMBOLMODE);
+						} else
+							redo = 0;
+					}while(redo);
+					cin >> name;
 					col = name[0]-'a'+1;
-					newgame.setCell(X_,row,col,E_NEAR);
-					newgame.print(SYMBOLMODE);
-					scoreElement result = newgame.evalAllCell(O_,width,depth);
+					agame.myVal = O_;
+					agame.setCell(X_,row,col,E_NEAR);
+					agame.terminate = 0;
+					scoreElement result = agame.evalAllCell(O_,width,depth,0);
+					cout <<"-------------------------------------------------------------------------------------" << endl;
+
 					printf("Score=%x, row=%d, col=%C",result.val,(result.cellPtr)->rowVal,(result.cellPtr)->colVal-1+'A');
 					cout << endl;
-					newgame.setCell(O_,(result.cellPtr)->rowVal,(result.cellPtr)->colVal,E_NEAR);
-					newgame.print(SYMBOLMODE);
+					agame.setCell(O_,(result.cellPtr)->rowVal,(result.cellPtr)->colVal,E_NEAR);
 					ahash.print();
+					aDebug.print(depth,width);
+					agame.print(SYMBOLMODE);
 				}
-				break;
-			}else if(testType[0] =='G') {
-					mode = 0;
-					col = 1;
-					int width = 5;
-					int depth = 5;
-					while(col < 20){
-						cout << "Enter row col: " << endl;
-						scanf("%d %c",&row,name);
-						col = name[0]-'a'+1;
-						agame.setCell(X_,row,col,E_NEAR);
-						agame.print(SYMBOLMODE);
-						scoreElement result = agame.evalAllCell(O_,width,depth);
-						printf("Score=%x, row=%d, col=%C",result.val,(result.cellPtr)->rowVal,(result.cellPtr)->colVal-1+'A');
-						cout << endl;
-						agame.setCell(O_,(result.cellPtr)->rowVal,(result.cellPtr)->colVal,E_NEAR);
-						ahash.print();						ahash.print();
-						agame.print(SYMBOLMODE);
-
-					}
+				agame.reset();
 				break;
 			} else{
 				break;

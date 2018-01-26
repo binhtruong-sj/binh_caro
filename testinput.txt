@@ -18,7 +18,7 @@ Lbbbbbbbbbbbbbbbb ROW 16
  ABCDEFGHIJKLMNO
 1
 
-G 0 0 0
+g 0 0 0
 
 score_1_line 0 13 h
 X_testing 0 8 m
