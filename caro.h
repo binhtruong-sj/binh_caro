@@ -25,6 +25,7 @@
 #define E_NEAR 0x4    // Empty cell, but close to other occupied cells
 #define E_TNEAR 0x8    // for temporary Near, clear after move is made
 
+#define MAXDEPTH 41
 #define InspectDistance 3
 #define SEARCH_DISTANCE 4
 #define ReverseDirection(a) (a<4)? (a+4):(a-4)

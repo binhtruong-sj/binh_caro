@@ -63,7 +63,7 @@ int main() {
 	Line tempLine;
 	int width = 5;
 	int depth = 5;
-	extern int search_depth, search_width, debugWidthAtDepth[20];
+	extern int search_depth, search_width, debugWidthAtDepth[];
 	extern tsDebug aDebug;
 	extern int debugScoring, debugScoringE, debugHash, debugAI, debugAIbest;
 	extern int debugRow, debugCol;
@@ -71,6 +71,8 @@ int main() {
 	extern hashTable ahash;
 	//agame.print();
 #if 1
+	cout << "Enter Width Depth ";
+	cin >> width >> depth;
 	cout << "Enter filename " << endl;
 	string aname;
 	cin >> aname;

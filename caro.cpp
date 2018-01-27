@@ -35,7 +35,7 @@ using namespace std;
 #include "caro.h"
 int search_depth = 5;
 int search_width = 5;
-int debugWidthAtDepth[20];
+int debugWidthAtDepth[MAXDEPTH];
 tsDebug aDebug,bestScoreDebug;
 int gdebug = 0;
 int debugScoring = 0;
@@ -45,13 +45,13 @@ int debugAI=0;
 int debugAIbest=0;
 int debugRow,debugCol;
 
-cell * last2[256];
+cell * last2[256]; // fixed at 256, change to use remeainder if different setting
 int last2v[256];
 int last2p = 0;
 int saveLast2p;
 int moveCnt= 0;
 hashTable ahash;
-scoreElement bestPath[40];
+scoreElement bestPath[MAXDEPTH];
 void tsDebug::print(int depth, int width) {
 	for (int d = depth; d >= 0; d--) {
 		cout << "Depth " << d << endl;
