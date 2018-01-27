@@ -153,11 +153,10 @@ int main() {
 				while (col < 20) {
 					int redo = 1;
 					do {
+						cout << "Enter row col " << endl;
 						cout
-								<< "Enter row col "
-								<< endl;
-						cout << "-1 undo -2 redo -3 debugScoring, -4 debugScoringE, -5 debugHash, -6 debugAI ";
-						cout << endl;
+								<< "-1 undo -2 redo -3 debugScoring, -4 debugScoringE,"
+								<< "-5 debugHash, -6 debugAI " << endl;
 						cin >> row;
 						if (row <= -1) {
 							switch (row) {
