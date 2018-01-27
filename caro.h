@@ -102,6 +102,7 @@ public:
 };
 
 struct scoreElement {
+public:
 	int val;
 	cell *cellPtr;
 };
@@ -129,6 +130,8 @@ public:
 	void setTNEAR(int x, int y);
 	void restoreCell(int val, int x, int y);
 	void undo1move();
+	void redo1move();
+
 	void clearScore();
 	Line extractLine(int dir, int x, int y);
 	int score1Cell(int setVal, int row, int col);

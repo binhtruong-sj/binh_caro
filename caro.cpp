@@ -36,18 +36,22 @@ using namespace std;
 int search_depth = 5;
 int search_width = 5;
 int debugWidthAtDepth[20];
-tsDebug aDebug;
+tsDebug aDebug,bestScoreDebug;
 int gdebug = 0;
 int debugScoring = 0;
 int debugScoringE = 0;
 int debugHash = 0;
 int debugAI=0;
+int debugAIbest=0;
 int debugRow,debugCol;
 
 cell * last2[256];
 int last2v[256];
 int last2p = 0;
+int saveLast2p;
+int moveCnt= 0;
 hashTable ahash;
+scoreElement bestPath[40];
 void tsDebug::print(int depth, int width) {
 	for (int d = depth; d >= 0; d--) {
 		cout << "Depth " << d << endl;
@@ -108,6 +112,9 @@ caro::caro(int table_size) {
 	}
 }
 void caro::reset() {
+	moveCnt=0;
+	last2p =0;
+	saveLast2p = 0;
 	for (int row = 1; row < size; row++)
 		for (int col = 1; col < size; col++)
 			board[row][col].val = E_FAR;
@@ -122,6 +129,7 @@ caro::~caro() {
  */
 void caro::print(int mode) {
 	cout << endl;
+
 	for (int row = 0; row <= size; row++) {
 		for (int col = 0; col <= size; col++) {
 			board[row][col].print(mode);
@@ -157,7 +165,9 @@ void caro::clearScore() {
 int caro::setCell(int setVal, int row, int col, int near) {
 	if ((board[row][col].val & 0x3) == 0) {
 		if (near == E_NEAR) { // Only real set can be UNDO
+			moveCnt++;
 			last2p = (last2p + 1) & 0xFF;
+			saveLast2p = last2p;
 			last2[last2p] = &board[row][col];
 			last2v[last2p] = board[row][col].val;
 		}
@@ -224,16 +234,35 @@ void caro::restoreCell(int saveVal, int row, int col) {
 
 void caro::undo1move() {
 	cout << "Undo p=" << last2p;
-	last2p = (last2p - 2) & 0xff;
-	printf("\tv=%x, r=%d, c=%d\n", last2v[last2p + 2],
-			last2[last2p + 2]->rowVal, last2[last2p + 2]->colVal);
-	restoreCell(last2v[last2p + 2], last2[last2p + 2]->rowVal,
-			last2[last2p + 2]->colVal);
-	printf("\tv=%x, r=%d, c=%d\n", last2v[last2p + 1],
-			last2[last2p + 1]->rowVal, last2[last2p + 1]->colVal);
+	if((last2p-2 != saveLast2p)&&moveCnt>0){
+		moveCnt -= 2;
+		last2p = (last2p - 2) & 0xff;
+		printf("\tv=%x, r=%d, c=%d\n", last2v[last2p + 2],
+				last2[last2p + 2]->rowVal, last2[last2p + 2]->colVal);
+		restoreCell(last2v[last2p + 2], last2[last2p + 2]->rowVal,
+				last2[last2p + 2]->colVal);
+		printf("\tv=%x, r=%d, c=%d\n", last2v[last2p + 1],
+				last2[last2p + 1]->rowVal, last2[last2p + 1]->colVal);
 
-	restoreCell(last2v[last2p + 1], last2[last2p + 1]->rowVal,
-			last2[last2p + 1]->colVal);
+		restoreCell(last2v[last2p + 1], last2[last2p + 1]->rowVal,
+				last2[last2p + 1]->colVal);
+	}
+}
+void caro::redo1move() {
+	cout << "redo p=" << last2p;
+	if(last2p+2 != saveLast2p){
+		moveCnt += 2;
+		last2p = (last2p + 2) & 0xff;
+		printf("\tv=%x, r=%d, c=%d\n", last2v[last2p + 2],
+				last2[last2p + 2]->rowVal, last2[last2p + 2]->colVal);
+		restoreCell(last2v[last2p + 2], last2[last2p + 2]->rowVal,
+				last2[last2p + 2]->colVal);
+		printf("\tv=%x, r=%d, c=%d\n", last2v[last2p + 1],
+				last2[last2p + 1]->rowVal, last2[last2p + 1]->colVal);
+
+		restoreCell(last2v[last2p + 1], last2[last2p + 1]->rowVal,
+				last2[last2p + 1]->colVal);
+	}
 }
 /*
  * extracting a line for the purpose of scoring
@@ -410,7 +439,7 @@ int caro::score1Cell(int setVal, int row, int col) {
 			ill_4++;
 #ifdef DEBUGSCORING
 		if(debugScoringE || debugScoring) {
-			printf("myVal=%d setVal=%d At row =%d col=%c dir=%d \n",myVal,row,col-1+'A',dir);
+			printf("myVal=%d setVal=%d At row =%d col=%c dir=%d \n",myVal,setVal,row,col-1+'A',dir);
 			cout << "Score =" << astar.score << endl;
 
 			if((row==debugRow)&&(col==debugCol)) prompt();
@@ -441,11 +470,8 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 	scoreElement *myScorePtr;
 	int opnVal = oppositeVal(setVal);
 	myScorePtr = new scoreElement[width];
-	/*
-	 if(terminate) {
-	 return(terminateScore);
-	 }
-	 */
+	int foundPath = -1;
+
 	aScoreArray.clear();
 	clearScore();
 // Scoring all possible cells (nearby cells).
@@ -468,10 +494,9 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 		myScorePtr[i] = aScoreArray[i];
 	}
 	bestScore = myScorePtr[0]; // BestScore
-	int ofsetWidthID = 10;
 #ifdef PRINTSCORE
 	if (currentWidth == debugWidthAtDepth[depth]) {
-		ofsetWidthID = 0;
+		foundPath = 1;
 		cout << "at Depth " << depth << " at width no " << currentWidth << endl;
 		print(SCOREMODE);
 		print(SYMBOLMODE);
@@ -488,6 +513,7 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 #endif
 // unless this is the last depth, playing the next hand (of the previous best fews)
 // Recursively call to evaluate that play. The next call is for the opponent hand.
+	bestPath[depth] = myScorePtr[0]; //top of sorted
 	if (depth > 0) {
 		for (int i = 0; i < width; i++) {
 
@@ -495,16 +521,20 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 			int saveVal = cPtr->val;
 			setCell(setVal, cPtr->rowVal, cPtr->colVal, E_TNEAR);
 			///////
-			myScorePtr[i] = evalAllCell(opnVal, width, depth - 1,
-					i + ofsetWidthID);
+			scoreElement returnScore = evalAllCell(opnVal, width, depth - 1,
+					i*foundPath);
 #ifdef PRINTSCORE
 			if (currentWidth == debugWidthAtDepth[depth]) {
-				aDebug.Array[depth][i].ts_ret = myScorePtr[i].val;
+				aDebug.Array[depth][i].ts_ret = returnScore.val;
 			}
 #endif
-			if (myScorePtr[i].val > bestScore.val) {
-				bestScore.val = myScorePtr[i].val;
+			if (returnScore.val > bestScore.val) {
+				bestScore.val = returnScore.val;
 				bestScore.cellPtr = cPtr;
+			}
+			if(returnScore.val > myScorePtr[0].val) {
+				myScorePtr[0] = returnScore;
+				bestPath[depth] = returnScore;
 			}
 			restoreCell(saveVal, cPtr->rowVal, cPtr->colVal);
 			if (bestScore.val > MAGICNUMBER) {
@@ -512,7 +542,6 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 			}
 		}
 	}
-
 	delete (myScorePtr);
 	return bestScore;
 }

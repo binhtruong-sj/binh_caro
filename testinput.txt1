@@ -1,0 +1,30 @@
+Mbbbbbbbbbbbbbbbb ROW -
+b---------------b ROW 1
+b---------------b ROW 2
+b---------------b ROW 3
+b---------------b ROW 4
+b---------------b ROW 5
+b---------------b ROW 6
+b---------------b ROW 7
+b-------O-XX----b ROW 8
+b-------XOX-----b ROW 9
+b-------OX------b ROW 10-
+b-------O--O----b ROW 11
+b---------------b ROW 12
+b---------------b ROW 13
+b---------------b ROW 14
+b---------------b ROW 15
+Lbbbbbbbbbbbbbbbb ROW 16
+ ABCDEFGHIJKLMNO
+1
+
+g 0 0 0
+
+score_1_line 0 13 h
+X_testing 0 8 m
+O_testing 0 12 h
+AX_EVAL_ALL_X 5 5 0
+
+quit 8 8 8
+
+
