@@ -21,11 +21,5 @@
 -5
 g 0 0 0
 
-score_1_line 0 13 h
-X_testing 0 8 m
-O_testing 0 12 h
-AX_EVAL_ALL_X 5 5 0
-
-quit 8 8 8
 
 

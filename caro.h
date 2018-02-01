@@ -49,6 +49,11 @@
 #define MIN(a,b) (a<b) ? a:b
 #define convertToChar(setVal) (setVal == X_ ? 'X' : 'O')
 #define convertToCol(col) ((char)(col-1+'a'))
+#define convertCellToStr(val) (char) ((val == X_) ? 'X' : \
+                              (val == O_) ? 'O' :\
+		                   (val == E_FAR) ? '-' :\
+		                     (val == 0xb) ? 'b' :\
+		                  (val == E_NEAR) ? '\"' : '.')
 /*
  * Line for the purpose of scoring
  */
@@ -98,9 +103,16 @@ public:
 /*
  * a cell in a caro table, has pointers to adjacent cells
  */
-class cell {
+class cellV {
 public:
 	int val = 0;
+	friend ostream & operator << (ostream & out,  cellV& v) {
+		out << convertCellToStr(v.val);
+		return out;
+	}
+};
+class cell : public cellV{
+public:
 	int rowVal, colVal, score = 0;
 	cell *near_ptr[8];
 	void print(int mode);
@@ -108,7 +120,7 @@ public:
 	void printid() {
 		printf("[%d%c]", rowVal, convertToCol(colVal));
 	}
-	friend ostream & operator <<(ostream &out, cell &c) {
+	friend ostream & operator << (ostream &out, cell &c) {
 		out << "[" << c.rowVal << convertToCol(c.colVal) << "]";
 		return out;
 	}
@@ -199,7 +211,7 @@ public:
 	}
 	int bestWidthAtDepth(int depth) {
 
-		if(depth==top.depth_id)
+		if (depth == top.depth_id)
 			return top.width_id;
 		else
 			return array[depth].width_id;
@@ -223,33 +235,19 @@ public:
 	virtual ~caro();
 	friend ostream & operator <<(ostream &out, const caro &c) {
 		out << endl;
-			for (int row = 0; row <= c.size; row++) {
-				for (int col = 0; col <= c.size; col++) {
-					out << ((c.board[row][col].val == X_)?'X':'O');
-				}
-				out << " ROW " << row << endl;
+		for (int row = 0; row <= c.size; row++) {
+			for (int col = 0; col <= c.size; col++) {
+				out << " " << (char)convertCellToStr(c.board[row][col].val);
 			}
-			for (char pchar = 'A'; pchar <= 'P'; pchar++)
-				out << " "<< pchar;
-			out << endl;
-			return out;
+			out << " ROW " << row << endl;
+		}
+		out << "  ";
+		for (char pchar = 'A'; pchar <= 'P'; pchar++)
+			out << " " << pchar;
+		out << endl;
+		return out;
 	}
 
-	unsigned setCellCnt = 0;
-	cell* setCell(int val, int x, int y, int near);
-	void setNEAR(int x, int y);
-	void setTNEAR(int x, int y);
-	cell* restoreCell(int val, int x, int y);
-	void undo1move();
-	void redo1move();
-
-	void clearScore();
-	Line extractLine(int dir, int x, int y);
-	int score1Cell(int setVal, int row, int col);
-	scoreElement evalAllCell(int val, int width, int depth, int currentWidth,
-			breadCrumb &b);
-	scoreElement terminateScore;
-	void reset();
 	void print(int mode) {
 		cout << endl;
 
@@ -277,6 +275,22 @@ public:
 			printf("%2C ", pchar);
 		cout << endl;
 	}
+	unsigned setCellCnt = 0;
+	cell* setCell(int val, int x, int y, int near);
+	void setNEAR(int x, int y);
+	void setTNEAR(int x, int y);
+	cell* restoreCell(int val, int x, int y);
+	void undo1move();
+	void redo1move();
+
+	void clearScore();
+	Line extractLine(int dir, int x, int y);
+	int score1Cell(int setVal, int row, int col);
+	scoreElement evalAllCell(int val, int width, int depth, int currentWidth,
+			breadCrumb &b);
+	scoreElement terminateScore;
+	void reset();
+
 };
 
 #endif /* CARO_H_ */

@@ -28,7 +28,6 @@ void getInput(FILE *finput, caro *agame) {
 	row = 1000;
 	do {
 		fgets(aline, 80, finput);
-		cout << aline << endl;
 		cptr = aline;
 		col = 0;
 		while (char achar = *cptr++) {
@@ -197,8 +196,14 @@ int main() {
 							case -13: {
 								char ffn[80] = "savefile.txt";
 								for (int i = 1; i < 1000; i++) {
-									cout << "filename =" << ffn;
+									sprintf(ffn,"savefile%d.txt",i);
 
+									cout << "filename =" << ffn;
+									ifstream ifile(ffn);
+									if(ifile) {
+										ifile.close();
+										continue;
+									}
 									ofstream ofile(ffn);
 									if (ofile) {
 										char ans[80];

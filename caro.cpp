@@ -73,8 +73,7 @@ void cell::print(int mode) {
 	if (mode == 0) {
 		printf("%2X", val);
 	} else if (mode == SYMBOLMODE) {
-		char ach = val == 0x1 ? 'X' : val == 0x2 ? 'O' : val == E_FAR ? '-' :
-					val == 0xb ? 'b' : val == E_NEAR ? '\"' : '.';
+		char ach = (char) convertCellToStr(val);
 		printf("%2c ", ach);
 	} else {
 		printf("%2x ", score);
