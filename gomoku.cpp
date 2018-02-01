@@ -7,7 +7,9 @@
 //============================================================================
 
 #include <iostream>
+#include <fstream>
 #include <locale>
+#include <string.h>
 using namespace std;
 #include "caro.h"
 #define convertToRow(a) isalpha(a)? (islower(a)? (a-'a'+1):(a-'A'+1)):1
@@ -21,33 +23,36 @@ using namespace std;
  *
  */
 void getInput(FILE *finput, caro *agame) {
-	char aline[20], *cptr;
+	char aline[80], *cptr;
 	int row, col;
-	row = 1;
+	row = 1000;
 	do {
 		fgets(aline, 80, finput);
+		cout << aline << endl;
 		cptr = aline;
 		col = 0;
 		while (char achar = *cptr++) {
-			if (achar == 'M') {
-				row = 0;
-				col = 0;
-				break;
-			} else if (achar == 'L') {
-				row = -100; // quit
-				break;
-			} else if (achar == 'b') {
-				if (col > 1) {
-					break;
-				} else {
+			if (achar != ' ') {
+				if ((row > 30) && (achar == 'b')) {
+					row = 0;
 					col = 0;
+					break;
+				} else if ((achar == 'L') || (achar == 'A')) {
+					row = -100; // quit
+					break;
+				} else if (achar == 'b') {
+					if (col > 1) {
+						break;
+					} else {
+						col = 0;
+					}
+				} else if (achar == 'X') {
+					agame->setCell(X_, row, col, E_NEAR);
+				} else if (achar == 'O') {
+					agame->setCell(O_, row, col, E_NEAR);
 				}
-			} else if (achar == 'X') {
-				agame->setCell(X_, row, col, E_NEAR);
-			} else if (achar == 'O') {
-				agame->setCell(O_, row, col, E_NEAR);
+				col++;
 			}
-			col++;
 		}
 	} while (++row > 0);
 	fgets(aline, 80, finput);
@@ -66,7 +71,6 @@ int main() {
 	extern int search_depth, search_width, debugWidthAtDepth[];
 	extern tsDebug aDebug;
 	extern int debugScoring, debugScoringE, debugHash, debugAI, debugAIbest;
-	extern int debugRow, debugCol;
 	int twoPass = 0;
 	extern hashTable ahash;
 	//agame.print();
@@ -82,7 +86,7 @@ int main() {
 	fn = fn + aname;
 	finput = fopen(fn.c_str(), "r");
 	for (int i = search_depth; i >= 0; i--) {
-		debugWidthAtDepth[i] = -1;
+		debugWidthAtDepth[i] = -9999;
 	}
 	debugWidthAtDepth[search_depth] = 0;
 	if (finput) {
@@ -164,7 +168,7 @@ int main() {
 						cout << "Enter row col " << endl;
 						cout
 								<< "-1 undo -2 redo -3 debugScoring, -4 debugScoringE,"
-								<< "-5 debugBestPath -6 debugHash, -7 debugAI, -11 debugwidth , -12 reset debug "
+								<< "-5 debugBestPath -6 debugHash, -7 debugAI, -11 debugwidth , -12 reset debug, -13 save "
 								<< endl;
 
 						cin >> row;
@@ -190,15 +194,34 @@ int main() {
 								}
 								debugWidthAtDepth[search_depth] = 0;
 								break;
+							case -13: {
+								char ffn[80] = "savefile.txt";
+								for (int i = 1; i < 1000; i++) {
+									cout << "filename =" << ffn;
 
+									ofstream ofile(ffn);
+									if (ofile) {
+										char ans[80];
+										cout << " Writing to " << ffn << " ?"
+												<< endl;
+										cin >> ans;
+										if ((ans[0] == 'n')
+												|| (ans[0] == 'N')) {
+											ofile.close();
+											continue;
+										}
+										ofile << agame;
+										ofile.close();
+										break;
+									}
+
+								}
+							}
+								break;
 							case -3:
 								cout << "Turn " << FLIP(debugScoring)
 										<< " debugScoring" << endl;
-								if (debugScoring) {
-									cout << "Enter Debug Row Col:";
-									cin >> debugRow >> name;
-									debugCol = name[0] - 'a' + 1;
-								}
+
 								break;
 
 							case -4:
@@ -279,7 +302,8 @@ int main() {
 						result = agame.evalAllCell(O_, width, depth, 0, top_bc);
 						cout << top_bc << endl;
 						cout << "bestWidthAtDepth ";
-						for (int d = depth; d >= 0; d--) {
+						debugWidthAtDepth[depth] = 0;
+						for (int d = depth - 1; d >= 0; d--) {
 							debugWidthAtDepth[d] = top_bc.bestWidthAtDepth(d);
 							cout << "d=" << d << "w=" << debugWidthAtDepth[d];
 						}

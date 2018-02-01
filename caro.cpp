@@ -131,33 +131,7 @@ caro::~caro() {
 /*
  * print out the entire table -- only for text base, new routine is needed for GUI
  */
-void caro::print(int mode) {
-	cout << endl;
 
-	for (int row = 0; row <= size; row++) {
-		for (int col = 0; col <= size; col++) {
-			board[row][col].print(mode);
-		}
-		cout << " ROW " << row << endl;
-	}
-	cout << "   ";
-	for (char pchar = 'A'; pchar <= 'P'; pchar++)
-		printf("%2C ", pchar);
-	cout << endl;
-}
-
-void caro::print() {
-	cout << endl;
-	for (int row = 0; row <= size; row++) {
-		for (int col = 0; col <= size; col++) {
-			board[row][col].print(0);
-		}
-		cout << " ROW " << row << endl;
-	}
-	for (char pchar = 'A'; pchar <= 'P'; pchar++)
-		printf("%2C ", pchar);
-	cout << endl;
-}
 void caro::clearScore() {
 	for (int row = 0; row <= size; row++)
 		for (int col = 0; col <= size; col++)
@@ -438,6 +412,8 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 	int foundPath = -9999;
 	int terminated = 0;
 	clearScore();
+//	cout << "eval, currentW=" << currentWidth << "debugwithatDepth="
+//			<< debugWidthAtDepth[depth] << endl;
 // Scoring all possible cells (nearby cells).
 // Sorting the results, only keep a few best one (WIDTH).
 	for (int row = 1; row < size; row++) {
@@ -468,11 +444,18 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 	bestWidthAtDepth[depth] = 0;
 #ifdef PRINTSCORE
 	if (currentWidth == debugWidthAtDepth[depth]) {
-		foundPath = 1;
+		foundPath = 0;
+//		cout << "DEBUG at Depth " << depth << " at cw=" << currentWidth
+//				<< ",dwad" << debugWidthAtDepth[depth] << endl;
+		if(debugScoring) print(SCOREMODE);
 		for (int i = 0; i < widthAtDepth[depth]; i++) {
 			aDebug.Array[depth][i].val = aScoreArray[i].val;
 			aDebug.Array[depth][i].cellPtr = aScoreArray[i].cellPtr;
+			cPtr = aScoreArray[i].cellPtr;
+			printf("<%d,%d>[%d%c]=$0x%x |", depth, i, cPtr->rowVal,
+					convertToCol(cPtr->colVal), aScoreArray[i].val);
 		}
+		cout << endl;
 	}
 #endif
 // unless this is the last depth, playing the next hand (of the previous best fews)
@@ -491,9 +474,13 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 			int saveVal = cPtr->val;
 			setCell(setVal, cPtr->rowVal, cPtr->colVal, E_TNEAR);
 			///////
+//			cout <<"="<< *cPtr<<"=, depth=" <<
+//						depth-1 << "width=" << width << "foundPath="<<foundPath << endl;
+
 			scoreElement returnScore = evalAllCell(opnVal, width, depth - 1,
-					i * foundPath, myCrumb);
+					i + foundPath, myCrumb);
 			aDebug.Array[depth][i].ts_ret = returnScore.val;
+//			printf("return Score=0x%x\n",returnScore.val);
 
 #ifdef PRINTSCORE
 			if (currentWidth == debugWidthAtDepth[depth]) {
@@ -509,11 +496,22 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 				parent.top.ptr = aScoreArray[i].cellPtr;
 				parent.top.width_id = i;
 			}
-
+			if (returnScore.val >= aScoreArray[0].val) {
+				aScoreArray[0].val = returnScore.val;
+			}
 			restoreCell(saveVal, cPtr->rowVal, cPtr->colVal);
 			if (bestScore.val >= MAGICNUMBER) { // only quit searching when find winner
 				terminated = 1;
 			}
+		}
+		if (foundPath >= 0) {
+			for (int i = 0; i < widthAtDepth[depth]; i++) {
+				cPtr = aScoreArray[i].cellPtr;
+				printf("<<%d,%d>>[%d%c]=$0x%x |", depth, i, cPtr->rowVal,
+						convertToCol(cPtr->colVal),
+						aDebug.Array[depth][i].ts_ret);
+			}
+			cout << endl;
 		}
 	}
 

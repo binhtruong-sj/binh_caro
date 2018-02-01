@@ -135,12 +135,10 @@ public:
 		for (int d = maxdepth; d >= 0; d--) {
 			cout << "Depth " << d << " Width=" << widthAtDepth[d] << " Best W:"
 					<< bestWidthAtDepth[d] << endl;
-			cout << "\t";
 			for (int w = 0; w < widthAtDepth[d]; w++) {
 				printf("<%d,%d>,[%d%c]=$0x%x,after$0x%x   ", d, w,
 						Array[d][w].cellPtr->rowVal,
-						convertToCol(Array[d][w].cellPtr->colVal),
-						Array[d][w].val,
+						Array[d][w].cellPtr->colVal - 1 + 'A', Array[d][w].val,
 						Array[d][w].ts_ret);
 			}
 			cout << endl;
@@ -190,8 +188,10 @@ public:
 							other.top.depth_id : top.depth_id;
 			for (int i = 0; i < dd; i++) {
 				array[i] = other.array[i];
+//				cout << "cc" << array[i];
 			}
 			array[dd] = other.top;
+//			cout << "crumb=" << array[dd] << endl;
 		} else {
 			cout << "ERRROOOOROOOOR" << endl;
 		}
@@ -199,7 +199,7 @@ public:
 	}
 	int bestWidthAtDepth(int depth) {
 
-		if (depth == top.depth_id)
+		if(depth==top.depth_id)
 			return top.width_id;
 		else
 			return array[depth].width_id;
@@ -221,6 +221,20 @@ public:
 	int myVal = X_;
 	caro(int table_size);
 	virtual ~caro();
+	friend ostream & operator <<(ostream &out, const caro &c) {
+		out << endl;
+			for (int row = 0; row <= c.size; row++) {
+				for (int col = 0; col <= c.size; col++) {
+					out << ((c.board[row][col].val == X_)?'X':'O');
+				}
+				out << " ROW " << row << endl;
+			}
+			for (char pchar = 'A'; pchar <= 'P'; pchar++)
+				out << " "<< pchar;
+			out << endl;
+			return out;
+	}
+
 	unsigned setCellCnt = 0;
 	cell* setCell(int val, int x, int y, int near);
 	void setNEAR(int x, int y);
@@ -236,8 +250,33 @@ public:
 			breadCrumb &b);
 	scoreElement terminateScore;
 	void reset();
-	void print(int mode);
-	void print();
+	void print(int mode) {
+		cout << endl;
+
+		for (int row = 0; row <= size; row++) {
+			for (int col = 0; col <= size; col++) {
+				board[row][col].print(mode);
+			}
+			cout << " ROW " << row << endl;
+		}
+		cout << "   ";
+		for (char pchar = 'A'; pchar <= 'P'; pchar++)
+			printf("%2C ", pchar);
+		cout << endl;
+	}
+
+	void print() {
+		cout << endl;
+		for (int row = 0; row <= size; row++) {
+			for (int col = 0; col <= size; col++) {
+				board[row][col].print(0);
+			}
+			cout << " ROW " << row << endl;
+		}
+		for (char pchar = 'A'; pchar <= 'P'; pchar++)
+			printf("%2C ", pchar);
+		cout << endl;
+	}
 };
 
 #endif /* CARO_H_ */
