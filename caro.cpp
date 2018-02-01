@@ -1,4 +1,4 @@
-/*f
+/*
  * caro.cpp
  *
  *  Created on: Jan 18, 2018
@@ -10,8 +10,8 @@
 
 using namespace std;
 
-//#define VERBOSE3 `1
-#define DEBUGSCORING 1
+//#define VERBOSE3 1
+//#define DEBUGSCORING 1
 #ifdef VERBOSE3
 #define VERBOSE2 1
 #endif
@@ -24,44 +24,48 @@ using namespace std;
 #define VERBOSE0 1
 #define HASH 1
 #define MAGICNUMBER 99999
+#define PRINTSCORE 1
 #define prompt() {cout << "Hit Enter Key" << endl; cin.get(); }
-#define toBinary(v,bianry) {int vvall = v;\
-								for(int bit=7; bit>=0; bit--) {\
-										binary[bit] = (vvall & 0x1) + '0';\
-										vvall >>= 1;\
-								}\
-								binary[8]= 0;}
 
 #include "caro.h"
 int search_depth = 5;
 int search_width = 5;
 int debugWidthAtDepth[MAXDEPTH];
-tsDebug aDebug,bestScoreDebug;
+int bestWidthAtDepth[MAXDEPTH];
+tsDebug aDebug, bestScoreDebug;
 int gdebug = 0;
 int debugScoring = 0;
 int debugScoringE = 0;
 int debugHash = 0;
-int debugAI=0;
-int debugAIbest=0;
-int debugRow,debugCol;
+int debugAI = 0;
+int debugAIbest = 0;
+int debugRow, debugCol;
 
 cell * last2[256]; // fixed at 256, change to use remeainder if different setting
 int last2v[256];
 int last2p = 0;
 int saveLast2p;
-int moveCnt= 0;
+int moveCnt = 0;
+
+tScore::tScore() {
+	val = 0;
+	ts_ret = 0;
+	cellPtr = nullptr;
+}
+
+tScore::tScore(scoreElement a) {
+	val = a.val;
+	cellPtr = a.cellPtr;
+	ts_ret = 0;
+}
+
 hashTable ahash;
-scoreElement bestPath[MAXDEPTH];
-void tsDebug::print(int depth, int width) {
-	for (int d = depth; d >= 0; d--) {
-		cout << "Depth " << d << endl;
-		for (int w = 0; w < width; w++) {
-			printf("I=%d,(%d,%c)=x0x%x,<0x%x   ", w,
-					Array[d][w].cellPtr->rowVal,
-					Array[d][w].cellPtr->colVal - 1 + 'A', Array[d][w].ts_cal,
-					Array[d][w].ts_ret);
+tsDebug::tsDebug() {
+	for (int i = 0; i < 40; i++) {
+		for (int j = 0; j < 40; j++) {
+			Array[i][j].val = Array[i][j].ts_ret = 0;
+			Array[i][j].cellPtr = nullptr;
 		}
-		cout << endl;
 	}
 }
 
@@ -84,10 +88,10 @@ void cell::print() {
 caro::caro(int table_size) {
 	size = table_size + 1;
 // Setup pointer to ajacent cells, only from 1 to size-1
-	aScoreArray.reserve(size * size);
 	terminate = 0;
-	terminateScore.val = MAGICNUMBER * 2;
-	terminateScore.cellPtr = &board[0][0];
+	for (int w = 0; w < 40; w++)
+		widthAtDepth[w] = 0;
+
 	for (int row = 0; row <= size; row++) {
 		for (int col = 0; col <= size; col++) {
 			board[row][col].rowVal = row;
@@ -112,8 +116,8 @@ caro::caro(int table_size) {
 	}
 }
 void caro::reset() {
-	moveCnt=0;
-	last2p =0;
+	moveCnt = 0;
+	last2p = 0;
 	saveLast2p = 0;
 	for (int row = 1; row < size; row++)
 		for (int col = 1; col < size; col++)
@@ -162,8 +166,11 @@ void caro::clearScore() {
 /*
  * set a cell to X or O
  */
-int caro::setCell(int setVal, int row, int col, int near) {
+cell * caro::setCell(int setVal, int row, int col, int near) {
 	if ((board[row][col].val & 0x3) == 0) {
+		if (setCellCnt++ == printInterval) {
+			setCellCnt = 0;
+		}
 		if (near == E_NEAR) { // Only real set can be UNDO
 			moveCnt++;
 			last2p = (last2p + 1) & 0xFF;
@@ -176,10 +183,9 @@ int caro::setCell(int setVal, int row, int col, int near) {
 			setNEAR(row, col);
 		else
 			setTNEAR(row, col);
-
-		return 0;
+		return &board[row][col];
 	} else
-		return 1;
+		return nullptr;
 }
 
 /*
@@ -218,7 +224,7 @@ void caro::setTNEAR(int row, int col) {
 /*
  * After temporary setting a Cell to X' or O' for scoring, now return it and its neighbor to prev values
  */
-void caro::restoreCell(int saveVal, int row, int col) {
+cell * caro::restoreCell(int saveVal, int row, int col) {
 	cell *currCell;
 	board[row][col].val = saveVal; // Return the val to prev
 
@@ -230,11 +236,12 @@ void caro::restoreCell(int saveVal, int row, int col) {
 				currCell->val = E_FAR; // only clear the cell with E_TNEAR (temporary NEAR) to FAR
 		}
 	}
+	return currCell;
 }
 
 void caro::undo1move() {
 	cout << "Undo p=" << last2p;
-	if((last2p-2 != saveLast2p)&&moveCnt>0){
+	if ((last2p - 2 != saveLast2p) && moveCnt > 0) {
 		moveCnt -= 2;
 		last2p = (last2p - 2) & 0xff;
 		printf("\tv=%x, r=%d, c=%d\n", last2v[last2p + 2],
@@ -250,7 +257,7 @@ void caro::undo1move() {
 }
 void caro::redo1move() {
 	cout << "redo p=" << last2p;
-	if(last2p+2 != saveLast2p){
+	if (last2p + 2 != saveLast2p) {
 		moveCnt += 2;
 		last2p = (last2p + 2) & 0xff;
 		printf("\tv=%x, r=%d, c=%d\n", last2v[last2p + 2],
@@ -272,6 +279,7 @@ void caro::redo1move() {
  */
 Line caro::extractLine(int dir, int row, int col) {
 	Line aline;
+	int bitcnt = 0;
 	aline.val = 0;
 	aline.cnt = 0;
 	// first scan for 1 set, bound by oposite or upto 8 total, bound by 3 spaces or 1 opposite
@@ -292,9 +300,6 @@ Line caro::extractLine(int dir, int row, int col) {
 	// Scan for O_ (assuming X_ turn)
 	int found_opp = 0;
 	for (int i = 0; i < SEARCH_DISTANCE; i++) {
-#ifdef VERBOSE3
-		currCell->print(SYMBOLMODE);
-#endif
 		if (currCell->val & oppval) {
 			found_opp = 1;
 			break;
@@ -303,21 +308,12 @@ Line caro::extractLine(int dir, int row, int col) {
 		currCell = currCell->near_ptr[dir];
 	}
 	if (found_opp) {
-		//currCell = currCell->near_ptr[ReverseDirection(dir)]; // backoff 1
 		currCell = backoffCell;
-
 	} else {
-		// Did not find O_, switch back to ori ad scan in reverse direction
+		// Did not find O_, switch back to ori and scan in reverse
 		currCell = oriCell;
 		dir = ReverseDirection(dir);
-#ifdef VERBOSE3
-		cout << "\nscan direction "<<dir << endl;
-#endif
-
 		for (int i = 0; i < SEARCH_DISTANCE; i++) {
-#ifdef VERBOSE3
-			currCell->print(SYMBOLMODE);
-#endif
 			if (currCell->val & oppval) {
 				break;
 			}
@@ -330,32 +326,34 @@ Line caro::extractLine(int dir, int row, int col) {
 
 	// Now reverse direction
 	dir = ReverseDirection(dir);
-#ifdef VERBOSE3
-	cout << "\nFinal scan direction "<<dir << endl;
-#endif
+
 	aline.val = 0;
-	aline.continuous = 0;
+	aline.connected = 0;
 	int save = 0;
 	for (int i = 0; i < (SEARCH_DISTANCE * 2 - 1); i++) {
 		aline.val = aline.val << 1;
 		aline.cnt++;
-#ifdef VERBOSE3
-		currCell->print(SYMBOLMODE);
-#endif
 		if (currCell->val == val) {
+			bitcnt++;
 			aline.val = aline.val | 0x1;
-			aline.continuous++;
+			aline.connected++;
 		} else {
-			if (aline.continuous > save)
-				save = aline.continuous;
-			aline.continuous = 0;
+			if (aline.connected > save)
+				save = aline.connected;
+			aline.connected = 0;
 		}
 		currCell = currCell->near_ptr[dir];
-		if (currCell->val & oppval)
+		if (currCell->val & oppval) {
+			bitcnt--; // with block, 3 is the samne as 2 with no block
 			break;
+		}
 	}
-	if (save > aline.continuous)
-		aline.continuous = save;
+	if (save > aline.connected)
+		aline.connected = save;
+	if (aline.cnt >= 5)
+		aline.connected = bitcnt;
+	else
+		aline.connected = 0;
 	return aline;
 }
 
@@ -366,23 +364,12 @@ void Line::print() {
 int Line::evaluate() {
 	// rudimentary scoring -- need to change to hybrid table lookup + fallback rudimentary (that
 	// self learning)
-#ifdef DEBUGSCORING
-	if (debugScoringE) {
-		printf("val=%x cnt=%d continuous=%d ",val,cnt,continuous);
-		cout << endl;
-
-		cout << "Enter Val (-1 for skip), cnt, continuous" << endl;
-		scanf("%d",&val);
-		if(val >= 0)
-			cin >> cnt >> continuous;
-	}
-#endif
 	score = 0;
 	int bitcnt = 0;
 	if (cnt < 5)
 		return score = 0;
-	if (((continuous >= 5) && (type == O_))
-			|| ((continuous == 5) && (type == X_))) {
+	if (((connected >= 5) && (type == O_))
+			|| ((connected == 5) && (type == X_))) {
 		return MAGICNUMBER * 2;
 	}
 	int tval = val;
@@ -390,21 +377,10 @@ int Line::evaluate() {
 		bitcnt = bitcnt + (tval & 1);
 		tval = tval >> 1;
 	}
-	score = (continuous - 1) * 4 + (bitcnt * bitcnt * bitcnt * 5) / cnt;
-	if (continuous == 4)
+	score = //(connected - 1)*CONTINUOUS_BIAS +
+			(bitcnt * bitcnt * bitcnt * 5) / cnt;
+	if (connected == 4)
 		score <<= 1;
-
-#ifdef DEBUGSCORING
-	if (debugScoring) {
-		char binary[10];
-		toBinary(val, binary);
-		printf("Line=%x, %s  cnt=%d, bitcnt=%d, continuous=%d Score=%d\n", val,
-				binary, cnt, bitcnt, continuous, score);
-
-		;
-
-	}
-#endif
 #ifdef HASH
 	ahash.addEntry(val, cnt, score);
 #endif
@@ -431,147 +407,166 @@ int caro::score1Cell(int setVal, int row, int col) {
 		astar.score = astar.score + astar.Xlines[dir].evaluate();
 		if (astar.Xlines[dir].evaluate())
 			multiples++;
-		if ((astar.Xlines[dir].continuous >= 6) && (setVal == X_))
+		if (astar.Xlines[dir].connected >= 6)
 			ill_6 = 1;
-		if (astar.Xlines[dir].continuous == 3)
+		if (astar.Xlines[dir].connected == 3)
 			ill_3++;
-		if (astar.Xlines[dir].continuous == 4)
+		if (astar.Xlines[dir].connected == 4)
 			ill_4++;
-#ifdef DEBUGSCORING
-		if(debugScoringE || debugScoring) {
-			printf("myVal=%d setVal=%d At row =%d col=%c dir=%d \n",myVal,setVal,row,col-1+'A',dir);
-			cout << "Score =" << astar.score << endl;
-
-			if((row==debugRow)&&(col==debugCol)) prompt();
-		}
-#endif
 	}
-	if (ill_6 || (ill_4 > 2) || (ill_3 > 2))
-		astar.score = -99999;
+	if ((ill_6 || (ill_4 > 2) || (ill_3 > 2)) && setVal == X_)
+		astar.score = -MAGICNUMBER;
 	else
 		astar.score = biasAdjust(myVal, setVal, astar.score, BIAS_PERCENT);
+	if ((astar.score >= MAGICNUMBER) && (setVal != myVal)) {
+		astar.score = -MAGICNUMBER;
+	}
 	board[row][col].score += astar.score * multiples;
 	restoreCell(saveVal, row, col);
-#ifdef DEBUGSCORING
-	if (debugScoring) {
-		cout << "Score =" << astar.score << endl;
-	}
-#endif
 	return astar.score;
 }
-bool morecmd(scoreElement &s1, scoreElement &s2) {
+bool morecmp(scoreElement &s1, scoreElement &s2) {
 	return (s1.val > s2.val);
 }
 scoreElement caro::evalAllCell(int setVal, int width, int depth,
-		int currentWidth) {
+		int currentWidth, breadCrumb &parent) {
 
 	cell *cPtr;
 	scoreElement bestScore;
-	scoreElement *myScorePtr;
+	vector<scoreElement> aScoreArray;
 	int opnVal = oppositeVal(setVal);
-	myScorePtr = new scoreElement[width];
-	int foundPath = -1;
-
-	aScoreArray.clear();
+	int foundPath = -9999;
+	int terminated = 0;
 	clearScore();
 // Scoring all possible cells (nearby cells).
 // Sorting the results, only keep a few best one (WIDTH).
 	for (int row = 1; row < size; row++) {
 		for (int col = 1; col < size; col++) {
+			if (terminated)
+				break;
 			if (board[row][col].val & (E_NEAR | E_TNEAR)) {
-				bestScore.val = score1Cell(setVal, row, col);
-				bestScore.val = bestScore.val + score1Cell(opnVal, row, col);
+				int returnVal = score1Cell(setVal, row, col);
+				bestScore.val = returnVal;
+				if (abs(returnVal) >= MAGICNUMBER) {
+					terminated = 1; // not sure about this.  Terminate too early is foily. Keep on going, and calculate best position is better.
+				} else {
+					returnVal = bestScore.val + score1Cell(opnVal, row, col);
+					bestScore.val = returnVal;
+				}
+				if (abs(returnVal) >= MAGICNUMBER) {
+					terminated = 1;
+				}
 				bestScore.cellPtr = &board[row][col];
 				aScoreArray.push_back(bestScore);
 			}
 		}
 	}
 // SORT
-	sort(aScoreArray.begin(), aScoreArray.end(), morecmd);
-
-// Saving the best fews
-	for (int i = 0; i < width; i++) {
-		myScorePtr[i] = aScoreArray[i];
-	}
-	bestScore = myScorePtr[0]; // BestScore
+	sort(aScoreArray.begin(), aScoreArray.end(), morecmp);
+	bestScore = aScoreArray[0]; // BestScore
+	widthAtDepth[depth] = MIN(width, (int )aScoreArray.size()); // size of aScoreArray can be smaller than "width"
+	bestWidthAtDepth[depth] = 0;
 #ifdef PRINTSCORE
 	if (currentWidth == debugWidthAtDepth[depth]) {
 		foundPath = 1;
-		cout << "at Depth " << depth << " at width no " << currentWidth << endl;
-		print(SCOREMODE);
-		print(SYMBOLMODE);
-		for (int i = 0; i < width; i++) {
-			aDebug.Array[depth][i].ts_cal = myScorePtr[i].val;
-			aDebug.Array[depth][i].cellPtr = myScorePtr[i].cellPtr;
-			cPtr = myScorePtr[i].cellPtr;
-			printf("Score=0x%x,(%d,%c)d=%d", myScorePtr[i].val, cPtr->rowVal,
-					cPtr->colVal - 1 + 'A', depth);
-			cout << endl;
+		for (int i = 0; i < widthAtDepth[depth]; i++) {
+			aDebug.Array[depth][i].val = aScoreArray[i].val;
+			aDebug.Array[depth][i].cellPtr = aScoreArray[i].cellPtr;
 		}
 	}
-
 #endif
 // unless this is the last depth, playing the next hand (of the previous best fews)
 // Recursively call to evaluate that play. The next call is for the opponent hand.
-	bestPath[depth] = myScorePtr[0]; //top of sorted
-	if (depth > 0) {
-		for (int i = 0; i < width; i++) {
+	parent.top.ptr = aScoreArray[0].cellPtr;
+	parent.top.width_id = 0;
+	parent.top.depth_id = depth;
 
-			cPtr = myScorePtr[i].cellPtr;
+	if (depth > 0) {
+		breadCrumb myCrumb(depth - 1);
+
+		for (int i = 0; i < widthAtDepth[depth]; i++) {
+			if (terminated)
+				break;
+			cPtr = aScoreArray[i].cellPtr;
 			int saveVal = cPtr->val;
 			setCell(setVal, cPtr->rowVal, cPtr->colVal, E_TNEAR);
 			///////
 			scoreElement returnScore = evalAllCell(opnVal, width, depth - 1,
-					i*foundPath);
+					i * foundPath, myCrumb);
+			aDebug.Array[depth][i].ts_ret = returnScore.val;
+
 #ifdef PRINTSCORE
 			if (currentWidth == debugWidthAtDepth[depth]) {
 				aDebug.Array[depth][i].ts_ret = returnScore.val;
+				if (returnScore.val >= aScoreArray[0].val)
+					bestWidthAtDepth[depth] = i;
 			}
 #endif
-			if (returnScore.val > bestScore.val) {
+			if (returnScore.val >= bestScore.val) {
 				bestScore.val = returnScore.val;
 				bestScore.cellPtr = cPtr;
+				parent = myCrumb;
+				parent.top.ptr = aScoreArray[i].cellPtr;
+				parent.top.width_id = i;
 			}
-			if(returnScore.val > myScorePtr[0].val) {
-				myScorePtr[0] = returnScore;
-				bestPath[depth] = returnScore;
-			}
+
 			restoreCell(saveVal, cPtr->rowVal, cPtr->colVal);
-			if (bestScore.val > MAGICNUMBER) {
-				return (bestScore);
+			if (bestScore.val >= MAGICNUMBER) { // only quit searching when find winner
+				terminated = 1;
 			}
 		}
 	}
-	delete (myScorePtr);
+
+	if (setCellCnt == 0)
+		print(SYMBOLMODE);
 	return bestScore;
 }
 
 hashTable::hashTable() {
 	arrayE_cnt = 0;
 }
-
+void swap2E(hEntry &a, hEntry &b) {
+	hEntry t;
+	t = a;
+	a = b;
+	b = t;
+}
 void hashTable::addEntry(int line, int bitcnt, int score) {
 	int i;
+	lowest = 99999999;
+	lowestI = 99999999;
+
 	for (i = 0; i < arrayE_cnt; i++) {
+		if (arrayE[i].refcnt < lowest) {
+			lowest = arrayE[i].refcnt;
+			lowestI = i;
+		}
 		if ((arrayE[i].line == line) && (arrayE[i].bitcnt == bitcnt)) {
-			arrayE[i].refcnt++;
+			if ((arrayE[i].refcnt++ > lowest) && (i > lowestI)) {
+				swapcnt++;
+				swap2E(arrayE[lowestI], arrayE[i]);
+			}
 			return;
 		}
 	}
 	if (i > 1000) {
 		cout << "hashE cnt too small" << endl;
-	}
-	{
+	} else {
 		arrayE[arrayE_cnt].line = line;
 		arrayE[arrayE_cnt].bitcnt = bitcnt;
+		arrayE[arrayE_cnt].refcnt = 1;
 		arrayE[arrayE_cnt++].score = score;
+
 	}
 }
 
 void hashTable::print() {
-	cout << "Hash Table: count = " << arrayE_cnt << endl;
-	printf("%4s %8s %8s %8s %8s %8s\n", "no", "Line", "bitcnt", "score",
-			"RefCnt", "Binary");
+	cout << "Hash Table: count = " << arrayE_cnt << "swapcnt =" << swapcnt
+			<< endl;
+	swapcnt = 0;
+	printf("%4s %8s %8s %8s %8s %8s", "no", "Line", "bitcnt", "score", "RefCnt",
+			"Binary");
+	cout << endl;
 	for (int i; i < arrayE_cnt; i++) {
 		char binary[9];
 		int val = arrayE[i].line;

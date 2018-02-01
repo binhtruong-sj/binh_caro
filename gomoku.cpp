@@ -61,24 +61,30 @@ int main() {
 	char name[4], testType[20];
 	FILE *finput;
 	Line tempLine;
-	int width = 5;
+	unsigned int width = 5;
 	int depth = 5;
 	extern int search_depth, search_width, debugWidthAtDepth[];
 	extern tsDebug aDebug;
 	extern int debugScoring, debugScoringE, debugHash, debugAI, debugAIbest;
 	extern int debugRow, debugCol;
-	extern scoreElement bestPath[];
+	int twoPass = 0;
 	extern hashTable ahash;
 	//agame.print();
 #if 1
-	cout << "Enter Width Depth ";
-	cin >> width >> depth;
+	cout << "Enter Width Depth " << endl;
+	cin >> search_width >> search_depth;
+	width = search_width;
+	depth = search_depth;
 	cout << "Enter filename " << endl;
 	string aname;
 	cin >> aname;
 	string fn = "testinput.txt";
 	fn = fn + aname;
 	finput = fopen(fn.c_str(), "r");
+	for (int i = search_depth; i >= 0; i--) {
+		debugWidthAtDepth[i] = -1;
+	}
+	debugWidthAtDepth[search_depth] = 0;
 	if (finput) {
 		getInput(finput, &agame);
 		fscanf(finput, "%d", &mode);
@@ -129,10 +135,11 @@ int main() {
 				int width = dir;
 				int depth = row;
 				scoreElement result;
+				breadCrumb top_bc(depth);
 				if (testType[1] == 'X')
-					result = agame.evalAllCell(X_, width, depth, 0); // width = dir; depth = row
+					result = agame.evalAllCell(X_, width, depth, 0, top_bc); // width = dir; depth = row
 				else
-					result = agame.evalAllCell(O_, width, depth, 0);
+					result = agame.evalAllCell(O_, width, depth, 0, top_bc);
 				printf("Score=%x, row=%d, col=%C", result.val,
 						(result.cellPtr)->rowVal,
 						(result.cellPtr)->colVal - 1 + 'A');
@@ -145,7 +152,6 @@ int main() {
 				col = 1;
 				cout << "NEW GAME" << endl;
 				cout << "Enter width, depth : " << endl;
-				;
 				cin >> search_width >> search_depth;
 				agame.reset();
 				width = search_width;
@@ -158,10 +164,33 @@ int main() {
 						cout << "Enter row col " << endl;
 						cout
 								<< "-1 undo -2 redo -3 debugScoring, -4 debugScoringE,"
-								<< "-5 debugHash, -6 debugAI " << endl;
+								<< "-5 debugBestPath -6 debugHash, -7 debugAI, -11 debugwidth , -12 reset debug "
+								<< endl;
+
 						cin >> row;
 						if (row <= -1) {
 							switch (row) {
+							case -11: {
+								int debug_d, debug_w;
+								cout << "Enter Depth";
+								cin >> debug_d;
+								cout << "Enter Width" << endl;
+								cin >> debug_w;
+								debugWidthAtDepth[debug_d] = debug_w;
+								for (int i = search_depth; i >= 0; i--) {
+									printf("D=%d,W=%d ", i,
+											debugWidthAtDepth[i]);
+								}
+								cout << endl;
+								break;
+							}
+							case -12:
+								for (int i = search_depth; i >= 0; i--) {
+									debugWidthAtDepth[i] = -1;
+								}
+								debugWidthAtDepth[search_depth] = 0;
+								break;
+
 							case -3:
 								cout << "Turn " << FLIP(debugScoring)
 										<< " debugScoring" << endl;
@@ -175,7 +204,26 @@ int main() {
 							case -4:
 								cout << "Turn " << FLIP(debugScoringE)
 										<< " debugScoringE" << endl;
+								cout << "Enter debug width ID at each depth ";
+								for (int i = depth; i >= 0; i--) {
+									int enterWidth;
+									cout << "at Depth= " << i;
+									cin >> enterWidth;
+									debugWidthAtDepth[i] = enterWidth;
+								}
+								break;
 							case -5:
+								cout << "Turn " << FLIP(debugScoringE)
+										<< " debugScoringBest" << endl;
+								if (debugScoringE)
+									twoPass = 1;
+								else
+									twoPass = 0;
+								for (int i = depth; i >= 0; i--) {
+									debugWidthAtDepth[i] = -1;
+								}
+								break;
+							case -6:
 								cout << "Turn " << FLIP(debugHash)
 										<< " debugHash" << endl;
 								if (row == -5) {
@@ -183,7 +231,7 @@ int main() {
 											<< " debugAIbest" << endl;
 								}
 								break;
-							case -6:
+							case -7:
 								cout << "Turn " << FLIP(debugAI) << " debugAI"
 										<< endl;
 								if (debugAI) {
@@ -198,6 +246,7 @@ int main() {
 							case -1:
 								agame.undo1move();
 								agame.print(SYMBOLMODE);
+
 								break;
 
 							case -2:
@@ -214,28 +263,34 @@ int main() {
 					cin >> name;
 					col = name[0] - 'a' + 1;
 					agame.myVal = O_;
-					agame.setCell(X_, row, col, E_NEAR);
-					agame.terminate = 0;
-					scoreElement result = agame.evalAllCell(O_, width, depth,
-							0);
-					cout
-							<< "-------------------------------------------------------------------------------------"
-							<< endl;
+					scoreElement result;
+					//			twoPass = 1;
+					cell * aptr = agame.setCell(X_, row, col, E_NEAR);
+					breadCrumb top_bc(depth); // at this level is depth+1
+					top_bc.top.ptr = aptr;
+					for (int passNo = 0; passNo <= twoPass; passNo++) {
+						cout << "Pass no " << passNo << endl;
+						agame.terminate = 0;
+						if (twoPass & (passNo == 0))
+							for (int d = depth; d >= 0; d--) {
+								debugWidthAtDepth[d] = -999;
+							}
 
-					printf("Score=%x, row=%d, col=%C", result.val,
-							(result.cellPtr)->rowVal,
-							(result.cellPtr)->colVal - 1 + 'A');
-					cout << endl;
+						result = agame.evalAllCell(O_, width, depth, 0, top_bc);
+						cout << top_bc << endl;
+						cout << "bestWidthAtDepth ";
+						for (int d = depth; d >= 0; d--) {
+							debugWidthAtDepth[d] = top_bc.bestWidthAtDepth(d);
+							cout << "d=" << d << "w=" << debugWidthAtDepth[d];
+						}
+						cout << endl;
+					}
 					agame.setCell(O_, (result.cellPtr)->rowVal,
 							(result.cellPtr)->colVal, E_NEAR);
 					ahash.print();
-					aDebug.print(depth, width);
-					for (int i = depth; i >= 0; i--) {
-						printf("Depth=%d bestScore=%x, row=%d, col=%c\n", i,
-								bestPath[i].val, bestPath[i].cellPtr->rowVal,
-								bestPath[i].cellPtr->colVal - 1 + 'a');
-
-					}
+					if (twoPass)
+						aDebug.print(depth, agame.widthAtDepth,
+								debugWidthAtDepth);
 					agame.print(SYMBOLMODE);
 				}
 				agame.reset();
