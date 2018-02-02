@@ -196,11 +196,11 @@ int main() {
 							case -13: {
 								char ffn[80] = "savefile.txt";
 								for (int i = 1; i < 1000; i++) {
-									sprintf(ffn,"savefile%d.txt",i);
+									sprintf(ffn, "savefile%d.txt", i);
 
 									cout << "filename =" << ffn;
 									ifstream ifile(ffn);
-									if(ifile) {
+									if (ifile) {
 										ifile.close();
 										continue;
 									}
@@ -299,12 +299,15 @@ int main() {
 					for (int passNo = 0; passNo <= twoPass; passNo++) {
 						cout << "Pass no " << passNo << endl;
 						agame.terminate = 0;
-						if (twoPass & (passNo == 0))
+						if (twoPass & (passNo == 0)) {
+							aDebug.lowDepth = depth + 1;
 							for (int d = depth; d >= 0; d--) {
 								debugWidthAtDepth[d] = -999;
 							}
-
+						}
+						agame.evalCnt = agame.myMoveAccScore = agame.opnMoveAccScore = 0;
 						result = agame.evalAllCell(O_, width, depth, 0, top_bc);
+						agame.print(SYMBOLMODE);
 						cout << top_bc << endl;
 						cout << "bestWidthAtDepth ";
 						debugWidthAtDepth[depth] = 0;
@@ -318,8 +321,8 @@ int main() {
 							(result.cellPtr)->colVal, E_NEAR);
 					ahash.print();
 					if (twoPass)
-						aDebug.print(depth, agame.widthAtDepth,
-								debugWidthAtDepth);
+						cout << "lowestD=" << aDebug.lowDepth << endl;
+					aDebug.print(depth, agame.widthAtDepth, debugWidthAtDepth);
 					agame.print(SYMBOLMODE);
 				}
 				agame.reset();

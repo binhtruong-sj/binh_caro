@@ -34,7 +34,7 @@
 #define oppositeVal(a) a==X_?O_:X_
 #define myTurn(a) a%2
 #define biasAdjust(favor_val, val,score,percent) (val == favor_val) ? ((score*percent)/100): score
-#define BIAS_PERCENT 105
+#define BIAS_PERCENT 92
 #define MAXWIDTH 50
 #define CONTINUOUS_BIAS 1
 
@@ -81,9 +81,12 @@ public:
 class Line {
 public:
 	friend class hashTable;
-	int val = 0;
-	int cnt = 0;
-	int connected;
+	int val = 0; // 32 bit encoded of a line
+				 // not the whole line.  Just started on O_
+				 // scan to maximum of 7 squares
+	int cnt = 0; // how many X_
+	int connected; // How long is the longest connected X_
+	int blocked; // is it blocked by O_ (next to an X_).
 	int type; // X_ or O_ are being search
 	int score = 0;
 	int evaluate();
@@ -106,12 +109,12 @@ public:
 class cellV {
 public:
 	int val = 0;
-	friend ostream & operator << (ostream & out,  cellV& v) {
+	friend ostream & operator <<(ostream & out, cellV& v) {
 		out << convertCellToStr(v.val);
 		return out;
 	}
 };
-class cell : public cellV{
+class cell: public cellV {
 public:
 	int rowVal, colVal, score = 0;
 	cell *near_ptr[8];
@@ -120,7 +123,7 @@ public:
 	void printid() {
 		printf("[%d%c]", rowVal, convertToCol(colVal));
 	}
-	friend ostream & operator << (ostream &out, cell &c) {
+	friend ostream & operator <<(ostream &out, cell &c) {
 		out << "[" << c.rowVal << convertToCol(c.colVal) << "]";
 		return out;
 	}
@@ -142,16 +145,24 @@ public:
 class tsDebug {
 public:
 	tScore Array[40][40];
+	int lowDepth = 0;
 	tsDebug();
 	void print(int maxdepth, int widthAtDepth[], int bestWidthAtDepth[]) {
-		for (int d = maxdepth; d >= 0; d--) {
+		for (int d = maxdepth; d >= lowDepth; d--) {
 			cout << "Depth " << d << " Width=" << widthAtDepth[d] << " Best W:"
 					<< bestWidthAtDepth[d] << endl;
 			for (int w = 0; w < widthAtDepth[d]; w++) {
-				printf("<%d,%d>,[%d%c]=$0x%x,after$0x%x   ", d, w,
-						Array[d][w].cellPtr->rowVal,
-						Array[d][w].cellPtr->colVal - 1 + 'A', Array[d][w].val,
-						Array[d][w].ts_ret);
+				if (w % 4 == 0)
+					printf("\n\t");
+				cout << "<" << d << "," << w << ">";
+				cout << *Array[d][w].cellPtr;
+				printf("=$0x%x,ret$0x%x ", Array[d][w].val, Array[d][w].ts_ret);
+				/*
+				 printf("<%d,%d>,[%d%c]=$0x%x,after$0x%x   ", d, w,
+				 Array[d][w].cellPtr->rowVal,
+				 Array[d][w].cellPtr->colVal - 1 + 'A', Array[d][w].val,
+				 Array[d][w].ts_ret);
+				 */
 			}
 			cout << endl;
 		}
@@ -226,18 +237,51 @@ public:
 class caro {
 public:
 	cell board[21][21];
+	int evalCnt = 0;
+	int myMoveAccScore = 0;
+	int opnMoveAccScore = 0;
 	int size = 17;
 	int widthAtDepth[40];
 
 	int terminate;
 	int myVal = X_;
-	caro(int table_size);
+	caro(int table_size) {
+		size = table_size + 1;
+		// Setup pointer to ajacent cells, only from 1 to size-1
+		terminate = 0;
+		for (int w = 0; w < 40; w++)
+			widthAtDepth[w] = 0;
+
+		for (int row = 0; row <= size; row++) {
+			for (int col = 0; col <= size; col++) {
+				board[row][col].rowVal = row;
+				board[row][col].colVal = col;
+				if ((row == 0) || (col == 0) || (row == size)
+						|| (col == size)) {
+					board[row][col].val = BOUNDARY;
+					for (int i = 0; i < 8; i++)
+						board[row][col].near_ptr[i] = &board[row][col];
+				} else {
+					board[row][col].val = E_FAR; // FAR: empty cell 5 away from any occupied cell
+					board[row][col].near_ptr[West] = &board[row][col - 1];
+					board[row][col].near_ptr[NWest] = &board[row - 1][col - 1];
+					board[row][col].near_ptr[North] = &board[row - 1][col];
+					board[row][col].near_ptr[NEast] = &board[row - 1][col + 1];
+
+					board[row][col].near_ptr[East] = &board[row][col + 1];
+					board[row][col].near_ptr[SEast] = &board[row + 1][col + 1];
+					board[row][col].near_ptr[South] = &board[row + 1][col];
+					board[row][col].near_ptr[SWest] = &board[row + 1][col - 1];
+				}
+			}
+		}
+	}
 	virtual ~caro();
 	friend ostream & operator <<(ostream &out, const caro &c) {
 		out << endl;
 		for (int row = 0; row <= c.size; row++) {
 			for (int col = 0; col <= c.size; col++) {
-				out << " " << (char)convertCellToStr(c.board[row][col].val);
+				out << " " << (char) convertCellToStr(c.board[row][col].val);
 			}
 			out << " ROW " << row << endl;
 		}
@@ -260,6 +304,9 @@ public:
 		cout << "   ";
 		for (char pchar = 'A'; pchar <= 'P'; pchar++)
 			printf("%2C ", pchar);
+		cout << endl;
+		printf("evalCnt=%d myScore=%d opnScore=%d delta=%d",
+				evalCnt,myMoveAccScore,opnMoveAccScore,opnMoveAccScore-myMoveAccScore);
 		cout << endl;
 	}
 
@@ -290,7 +337,6 @@ public:
 			breadCrumb &b);
 	scoreElement terminateScore;
 	void reset();
-
 };
 
 #endif /* CARO_H_ */

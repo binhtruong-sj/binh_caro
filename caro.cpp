@@ -84,36 +84,6 @@ void cell::print() {
 	cout << val;
 }
 
-caro::caro(int table_size) {
-	size = table_size + 1;
-// Setup pointer to ajacent cells, only from 1 to size-1
-	terminate = 0;
-	for (int w = 0; w < 40; w++)
-		widthAtDepth[w] = 0;
-
-	for (int row = 0; row <= size; row++) {
-		for (int col = 0; col <= size; col++) {
-			board[row][col].rowVal = row;
-			board[row][col].colVal = col;
-			if ((row == 0) || (col == 0) || (row == size) || (col == size)) {
-				board[row][col].val = BOUNDARY;
-				for (int i = 0; i < 8; i++)
-					board[row][col].near_ptr[i] = &board[row][col];
-			} else {
-				board[row][col].val = E_FAR; // FAR: empty cell 5 away from any occupied cell
-				board[row][col].near_ptr[West] = &board[row][col - 1];
-				board[row][col].near_ptr[NWest] = &board[row - 1][col - 1];
-				board[row][col].near_ptr[North] = &board[row - 1][col];
-				board[row][col].near_ptr[NEast] = &board[row - 1][col + 1];
-
-				board[row][col].near_ptr[East] = &board[row][col + 1];
-				board[row][col].near_ptr[SEast] = &board[row + 1][col + 1];
-				board[row][col].near_ptr[South] = &board[row + 1][col];
-				board[row][col].near_ptr[SWest] = &board[row + 1][col - 1];
-			}
-		}
-	}
-}
 void caro::reset() {
 	moveCnt = 0;
 	last2p = 0;
@@ -145,6 +115,9 @@ cell * caro::setCell(int setVal, int row, int col, int near) {
 			setCellCnt = 0;
 		}
 		if (near == E_NEAR) { // Only real set can be UNDO
+			evalCnt = 0;
+			myMoveAccScore = 0;
+			opnMoveAccScore = 0;
 			moveCnt++;
 			last2p = (last2p + 1) & 0xFF;
 			saveLast2p = last2p;
@@ -266,21 +239,22 @@ Line caro::extractLine(int dir, int row, int col) {
 	cell *currCell = &board[row][col];
 	cell *oriCell = currCell;
 	cell *backoffCell;
-#ifdef VERBOSE3
-	cout << "\nscan direction "<<dir << endl;
-#endif
 
 	// Scan for O_ (assuming X_ turn)
-	int found_opp = 0;
+	aline.blocked = 0;
+	int prevVal = 0;
 	for (int i = 0; i < SEARCH_DISTANCE; i++) {
 		if (currCell->val & oppval) {
-			found_opp = 1;
+			if (prevVal & (currCell->val == oppval))
+				aline.blocked = 1;
 			break;
 		}
 		backoffCell = currCell;
+		prevVal = currCell->val == val;
 		currCell = currCell->near_ptr[dir];
+
 	}
-	if (found_opp) {
+	if (aline.blocked) {
 		currCell = backoffCell;
 	} else {
 		// Did not find O_, switch back to ori and scan in reverse
@@ -288,12 +262,14 @@ Line caro::extractLine(int dir, int row, int col) {
 		dir = ReverseDirection(dir);
 		for (int i = 0; i < SEARCH_DISTANCE; i++) {
 			if (currCell->val & oppval) {
+				if (prevVal & (currCell->val == oppval))
+					aline.blocked = 1;
 				break;
 			}
 			backoffCell = currCell;
+			prevVal = currCell->val == val;
 			currCell = currCell->near_ptr[dir];
 		}
-		//currCell = currCell->near_ptr[ReverseDirection(dir)]; // backoff 1
 		currCell = backoffCell;
 	}
 
@@ -306,7 +282,9 @@ Line caro::extractLine(int dir, int row, int col) {
 	for (int i = 0; i < (SEARCH_DISTANCE * 2 - 1); i++) {
 		aline.val = aline.val << 1;
 		aline.cnt++;
+		prevVal = currCell->val == val;
 		if (currCell->val == val) {
+
 			bitcnt++;
 			aline.val = aline.val | 0x1;
 			aline.connected++;
@@ -317,10 +295,15 @@ Line caro::extractLine(int dir, int row, int col) {
 		}
 		currCell = currCell->near_ptr[dir];
 		if (currCell->val & oppval) {
-			bitcnt--; // with block, 3 is the samne as 2 with no block
+			if (prevVal & (currCell->val == oppval))
+				aline.blocked++;
 			break;
 		}
 	}
+	bitcnt -= aline.blocked;
+	if (bitcnt < 0)
+		bitcnt = 0;
+
 	if (save > aline.connected)
 		aline.connected = save;
 	if (aline.cnt >= 5)
@@ -375,10 +358,11 @@ int caro::score1Cell(int setVal, int row, int col) {
 	setCell(setVal, row, col, E_TNEAR);
 	int multiples = 0;
 	for (int dir = East; dir < West; dir++) {
-
+		evalCnt++;
 		astar.Xlines[dir] = extractLine(dir, row, col);
-		astar.score = astar.score + astar.Xlines[dir].evaluate();
-		if (astar.Xlines[dir].evaluate())
+		int tscore = astar.Xlines[dir].evaluate();
+		astar.score = astar.score + tscore;
+		if (tscore)
 			multiples++;
 		if (astar.Xlines[dir].connected >= 6)
 			ill_6 = 1;
@@ -395,7 +379,13 @@ int caro::score1Cell(int setVal, int row, int col) {
 		astar.score = -MAGICNUMBER;
 	}
 	board[row][col].score += astar.score * multiples;
+	if (setVal == myVal)
+		myMoveAccScore += astar.score * multiples;
+	else
+		opnMoveAccScore += astar.score * multiples;
+
 	restoreCell(saveVal, row, col);
+
 	return astar.score;
 }
 bool morecmp(scoreElement &s1, scoreElement &s2) {
@@ -411,10 +401,7 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 	int foundPath = -9999;
 	int terminated = 0;
 	clearScore();
-//	cout << "eval, currentW=" << currentWidth << "debugwithatDepth="
-//			<< debugWidthAtDepth[depth] << endl;
-// Scoring all possible cells (nearby cells).
-// Sorting the results, only keep a few best one (WIDTH).
+
 	for (int row = 1; row < size; row++) {
 		for (int col = 1; col < size; col++) {
 			if (terminated)
@@ -436,6 +423,7 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 			}
 		}
 	}
+
 // SORT
 	sort(aScoreArray.begin(), aScoreArray.end(), morecmp);
 	bestScore = aScoreArray[0]; // BestScore
@@ -443,16 +431,26 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 	bestWidthAtDepth[depth] = 0;
 #ifdef PRINTSCORE
 	if (currentWidth == debugWidthAtDepth[depth]) {
+		if (terminated) {
+			aDebug.lowDepth = depth;
+		}
+
 		foundPath = 0;
 //		cout << "DEBUG at Depth " << depth << " at cw=" << currentWidth
 //				<< ",dwad" << debugWidthAtDepth[depth] << endl;
-		if(debugScoring) print(SCOREMODE);
+		if (debugScoring)
+			print(SCOREMODE);
+		cout << endl;
 		for (int i = 0; i < widthAtDepth[depth]; i++) {
 			aDebug.Array[depth][i].val = aScoreArray[i].val;
 			aDebug.Array[depth][i].cellPtr = aScoreArray[i].cellPtr;
 			cPtr = aScoreArray[i].cellPtr;
-			printf("<%d,%d>[%d%c]=$0x%x |", depth, i, cPtr->rowVal,
-					convertToCol(cPtr->colVal), aScoreArray[i].val);
+			if (debugScoring) {
+				printf("<%d,%d>[%d%c]=$0x%x |", depth, i, cPtr->rowVal,
+						convertToCol(cPtr->colVal), aScoreArray[i].val);
+				if (i % 4 == 0)
+					printf("\n\t");
+			}
 		}
 		cout << endl;
 	}
@@ -473,16 +471,14 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 			int saveVal = cPtr->val;
 			setCell(setVal, cPtr->rowVal, cPtr->colVal, E_TNEAR);
 			///////
-//			cout <<"="<< *cPtr<<"=, depth=" <<
-//						depth-1 << "width=" << width << "foundPath="<<foundPath << endl;
-
 			scoreElement returnScore = evalAllCell(opnVal, width, depth - 1,
 					i + foundPath, myCrumb);
-			aDebug.Array[depth][i].ts_ret = returnScore.val;
-//			printf("return Score=0x%x\n",returnScore.val);
-
 #ifdef PRINTSCORE
 			if (currentWidth == debugWidthAtDepth[depth]) {
+				if (depth < aDebug.lowDepth) {
+					aDebug.lowDepth = depth;
+					cout << "lowest D=" << aDebug.lowDepth << endl;
+				}
 				aDebug.Array[depth][i].ts_ret = returnScore.val;
 				if (returnScore.val >= aScoreArray[0].val)
 					bestWidthAtDepth[depth] = i;
@@ -506,16 +502,21 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 		if (foundPath >= 0) {
 			for (int i = 0; i < widthAtDepth[depth]; i++) {
 				cPtr = aScoreArray[i].cellPtr;
-				printf("<<%d,%d>>[%d%c]=$0x%x |", depth, i, cPtr->rowVal,
-						convertToCol(cPtr->colVal),
-						aDebug.Array[depth][i].ts_ret);
+				if (debugScoring) {
+					printf("<<%d,%d>>[%d%c]=$0x%x |", depth, i, cPtr->rowVal,
+							convertToCol(cPtr->colVal),
+							aDebug.Array[depth][i].ts_ret);
+					if (i % 4 == 0)
+						printf("\n\t");
+				}
 			}
 			cout << endl;
 		}
 	}
-
-	if (setCellCnt == 0)
+	if (setCellCnt == 0) {
+		print(SCOREMODE);
 		print(SYMBOLMODE);
+	}
 	return bestScore;
 }
 
