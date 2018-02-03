@@ -25,13 +25,12 @@ using namespace std;
 #define HASH 1
 #define MAGICNUMBER 99999
 #define PRINTSCORE 1
-#define prompt() {cout << "Hit Enter Key" << endl; cin.get(); }
+#define prompt() {cout << endl; cout << "Hit Enter Key" << endl; cin.get(); }
 
 #include "caro.h"
 int search_depth = 5;
 int search_width = 5;
-int debugWidthAtDepth[MAXDEPTH];
-int bestWidthAtDepth[MAXDEPTH];
+
 tsDebug aDebug, bestScoreDebug;
 int gdebug = 0;
 int debugScoring = 0;
@@ -300,23 +299,19 @@ Line caro::extractLine(int dir, int row, int col) {
 			break;
 		}
 	}
-	bitcnt -= aline.blocked;
-	if (bitcnt < 0)
-		bitcnt = 0;
 
 	if (save > aline.connected)
 		aline.connected = save;
 	if (aline.cnt >= 5)
-		aline.connected = bitcnt;
+		if (bitcnt <= 4)
+			aline.connected = bitcnt - aline.blocked;
+		else
+			aline.connected = bitcnt;
 	else
 		aline.connected = 0;
 	return aline;
 }
 
-void Line::print() {
-	printf("Line=0x%X Cnt=%d Score=%d", val, cnt, score);
-	cout << endl;
-}
 int Line::evaluate() {
 	// rudimentary scoring -- need to change to hybrid table lookup + fallback rudimentary (that
 	// self learning)
@@ -361,6 +356,13 @@ int caro::score1Cell(int setVal, int row, int col) {
 		evalCnt++;
 		astar.Xlines[dir] = extractLine(dir, row, col);
 		int tscore = astar.Xlines[dir].evaluate();
+		if (aDebug.enablePrinting) {
+			cout << board[row][col] << "dir=" << dir;
+			cout << astar.Xlines[dir] << endl;
+			if (aDebug.printCnt++ % 40 == 0)
+				prompt()
+			;
+		}
 		astar.score = astar.score + tscore;
 		if (tscore)
 			multiples++;
@@ -428,19 +430,17 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 	sort(aScoreArray.begin(), aScoreArray.end(), morecmp);
 	bestScore = aScoreArray[0]; // BestScore
 	widthAtDepth[depth] = MIN(width, (int )aScoreArray.size()); // size of aScoreArray can be smaller than "width"
-	bestWidthAtDepth[depth] = 0;
 #ifdef PRINTSCORE
-	if (currentWidth == debugWidthAtDepth[depth]) {
+	if (currentWidth == aDebug.debugWidthAtDepth[depth]) {
 		if (terminated) {
 			aDebug.lowDepth = depth;
 		}
 
 		foundPath = 0;
 //		cout << "DEBUG at Depth " << depth << " at cw=" << currentWidth
-//				<< ",dwad" << debugWidthAtDepth[depth] << endl;
+//				<< ",dwad" << aDebug.debugWidthAtDepth[depth] << endl;
 		if (debugScoring)
 			print(SCOREMODE);
-		cout << endl;
 		for (int i = 0; i < widthAtDepth[depth]; i++) {
 			aDebug.Array[depth][i].val = aScoreArray[i].val;
 			aDebug.Array[depth][i].cellPtr = aScoreArray[i].cellPtr;
@@ -452,9 +452,25 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 					printf("\n\t");
 			}
 		}
-		cout << endl;
+		//cout << endl;
 	}
 #endif
+	// debug stuff
+	if (foundPath == 0) {
+		printf("Found debug depth d =%d, w = %d", depth, currentWidth);
+		cout << endl;
+
+		if (depth == aDebug.debugBreakAtDepth) {
+			cout << "Stopped at debugBreakAtDepth value = "
+					<< aDebug.debugBreakAtDepth;
+			cout << endl;
+			aDebug.enablePrinting = 0;
+			prompt()
+			;
+		} else if (depth == (aDebug.debugBreakAtDepth - 1)) {
+			aDebug.enablePrinting = 1;
+		}
+	}
 // unless this is the last depth, playing the next hand (of the previous best fews)
 // Recursively call to evaluate that play. The next call is for the opponent hand.
 	parent.top.ptr = aScoreArray[0].cellPtr;
@@ -474,14 +490,12 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 			scoreElement returnScore = evalAllCell(opnVal, width, depth - 1,
 					i + foundPath, myCrumb);
 #ifdef PRINTSCORE
-			if (currentWidth == debugWidthAtDepth[depth]) {
+			if (currentWidth == aDebug.debugWidthAtDepth[depth]) {
 				if (depth < aDebug.lowDepth) {
 					aDebug.lowDepth = depth;
 					cout << "lowest D=" << aDebug.lowDepth << endl;
 				}
 				aDebug.Array[depth][i].ts_ret = returnScore.val;
-				if (returnScore.val >= aScoreArray[0].val)
-					bestWidthAtDepth[depth] = i;
 			}
 #endif
 			if (returnScore.val >= bestScore.val) {
@@ -496,6 +510,7 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 			}
 			restoreCell(saveVal, cPtr->rowVal, cPtr->colVal);
 			if (bestScore.val >= MAGICNUMBER) { // only quit searching when find winner
+				cout << "Early Terinated" << endl;
 				terminated = 1;
 			}
 		}
@@ -510,13 +525,14 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 						printf("\n\t");
 				}
 			}
-			cout << endl;
+			//	cout << endl;
 		}
 	}
 	if (setCellCnt == 0) {
 		print(SCOREMODE);
 		print(SYMBOLMODE);
 	}
+
 	return bestScore;
 }
 

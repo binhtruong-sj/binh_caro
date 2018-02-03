@@ -67,7 +67,7 @@ int main() {
 	Line tempLine;
 	unsigned int width = 5;
 	int depth = 5;
-	extern int search_depth, search_width, debugWidthAtDepth[];
+	extern int search_depth, search_width;
 	extern tsDebug aDebug;
 	extern int debugScoring, debugScoringE, debugHash, debugAI, debugAIbest;
 	int twoPass = 0;
@@ -85,9 +85,9 @@ int main() {
 	fn = fn + aname;
 	finput = fopen(fn.c_str(), "r");
 	for (int i = search_depth; i >= 0; i--) {
-		debugWidthAtDepth[i] = -9999;
+		aDebug.debugWidthAtDepth[i] = -9999;
 	}
-	debugWidthAtDepth[search_depth] = 0;
+	aDebug.debugWidthAtDepth[search_depth] = 0;
 	if (finput) {
 		getInput(finput, &agame);
 		fscanf(finput, "%d", &mode);
@@ -161,6 +161,7 @@ int main() {
 				depth = search_depth;
 
 			case 'g':
+				aDebug.debugBreakAtDepth = -1;
 				while (col < 20) {
 					int redo = 1;
 					do {
@@ -179,19 +180,19 @@ int main() {
 								cin >> debug_d;
 								cout << "Enter Width" << endl;
 								cin >> debug_w;
-								debugWidthAtDepth[debug_d] = debug_w;
+								aDebug.debugWidthAtDepth[debug_d] = debug_w;
 								for (int i = search_depth; i >= 0; i--) {
 									printf("D=%d,W=%d ", i,
-											debugWidthAtDepth[i]);
+											aDebug.debugWidthAtDepth[i]);
 								}
 								cout << endl;
 								break;
 							}
 							case -12:
 								for (int i = search_depth; i >= 0; i--) {
-									debugWidthAtDepth[i] = -1;
+									aDebug.debugWidthAtDepth[i] = -1;
 								}
-								debugWidthAtDepth[search_depth] = 0;
+								aDebug.debugWidthAtDepth[search_depth] = 0;
 								break;
 							case -13: {
 								char ffn[80] = "savefile.txt";
@@ -232,12 +233,20 @@ int main() {
 							case -4:
 								cout << "Turn " << FLIP(debugScoringE)
 										<< " debugScoringE" << endl;
-								cout << "Enter debug width ID at each depth ";
-								for (int i = depth; i >= 0; i--) {
-									int enterWidth;
-									cout << "at Depth= " << i;
-									cin >> enterWidth;
-									debugWidthAtDepth[i] = enterWidth;
+								if (debugScoringE) {
+									cout
+											<< "Enter debug width ID at each depth ";
+									for (int i = depth; i >= 0; i--) {
+										int enterWidth;
+										cout << "at Depth= " << i << " = ";
+										cin >> enterWidth;
+										aDebug.debugWidthAtDepth[i] =
+												enterWidth;
+									}
+									cout
+											<< "Enter depth # to break for prompt: ";
+									cin >> aDebug.debugBreakAtDepth;
+									aDebug.enablePrinting = 0;
 								}
 								break;
 							case -5:
@@ -248,7 +257,7 @@ int main() {
 								else
 									twoPass = 0;
 								for (int i = depth; i >= 0; i--) {
-									debugWidthAtDepth[i] = -1;
+									aDebug.debugWidthAtDepth[i] = -1;
 								}
 								break;
 							case -6:
@@ -267,7 +276,7 @@ int main() {
 											<< "Enter the % of I at each Depth Search: "
 											<< endl;
 									for (int i = search_depth; i >= 0; i--) {
-										cin >> debugWidthAtDepth[i];
+										cin >> aDebug.debugWidthAtDepth[i];
 									}
 								}
 								break;
@@ -302,27 +311,31 @@ int main() {
 						if (twoPass & (passNo == 0)) {
 							aDebug.lowDepth = depth + 1;
 							for (int d = depth; d >= 0; d--) {
-								debugWidthAtDepth[d] = -999;
+								aDebug.debugWidthAtDepth[d] = -999;
 							}
 						}
-						agame.evalCnt = agame.myMoveAccScore = agame.opnMoveAccScore = 0;
+						agame.evalCnt = agame.myMoveAccScore =
+								agame.opnMoveAccScore = 0;
 						result = agame.evalAllCell(O_, width, depth, 0, top_bc);
 						agame.print(SYMBOLMODE);
 						cout << top_bc << endl;
-						cout << "bestWidthAtDepth ";
-						debugWidthAtDepth[depth] = 0;
+						cout << "aDebug.debugWidthAtDepth ";
 						for (int d = depth - 1; d >= 0; d--) {
-							debugWidthAtDepth[d] = top_bc.bestWidthAtDepth(d);
-							cout << "d=" << d << "w=" << debugWidthAtDepth[d];
+							aDebug.debugWidthAtDepth[d] =
+									top_bc.bestWidthAtDepth(d);
+							cout << "d=" << d << "w="
+									<< aDebug.debugWidthAtDepth[d];
 						}
 						cout << endl;
 					}
 					agame.setCell(O_, (result.cellPtr)->rowVal,
 							(result.cellPtr)->colVal, E_NEAR);
 					ahash.print();
-					if (twoPass)
+					if (twoPass) {
 						cout << "lowestD=" << aDebug.lowDepth << endl;
-					aDebug.print(depth, agame.widthAtDepth, debugWidthAtDepth);
+						aDebug.print(depth, agame.widthAtDepth,
+								aDebug.debugWidthAtDepth);
+					}
 					agame.print(SYMBOLMODE);
 				}
 				agame.reset();

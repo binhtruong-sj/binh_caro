@@ -89,8 +89,24 @@ public:
 	int blocked; // is it blocked by O_ (next to an X_).
 	int type; // X_ or O_ are being search
 	int score = 0;
+	friend ostream & operator <<(ostream & out, Line & v) {
+		char binary[9];
+		toBinary(v.val, binary);
+		out << "Line=" << binary << " Cnt=" << v.cnt;
+		out << " Blocked=" << v.blocked << " Connected=" << v.connected;
+		out << " Score = " << v.score;
+		return out;
+	}
+
+
 	int evaluate();
-	void print();
+	void print() {
+		char binary[9];
+		toBinary(val, binary);
+		printf("Line=%s Cnt=%d blocked=%d connected =%d Score=%d", binary, cnt,
+				blocked, connected, score);
+		cout << endl;
+	}
 };
 
 /*
@@ -145,6 +161,14 @@ public:
 class tsDebug {
 public:
 	tScore Array[40][40];
+	int enablePrinting = 0;
+	int printCnt = 0;
+	int debugWidthAtDepth[MAXDEPTH];
+	int debugBreakAtDepth = -1; // not breaking
+								// indicating the depth to take a break if follow
+								// the path of debugWidthAtDepth array
+
+	int bestWidthAtDepth[MAXDEPTH];
 	int lowDepth = 0;
 	tsDebug();
 	void print(int maxdepth, int widthAtDepth[], int bestWidthAtDepth[]) {
@@ -157,12 +181,6 @@ public:
 				cout << "<" << d << "," << w << ">";
 				cout << *Array[d][w].cellPtr;
 				printf("=$0x%x,ret$0x%x ", Array[d][w].val, Array[d][w].ts_ret);
-				/*
-				 printf("<%d,%d>,[%d%c]=$0x%x,after$0x%x   ", d, w,
-				 Array[d][w].cellPtr->rowVal,
-				 Array[d][w].cellPtr->colVal - 1 + 'A', Array[d][w].val,
-				 Array[d][w].ts_ret);
-				 */
 			}
 			cout << endl;
 		}
@@ -221,7 +239,6 @@ public:
 		return *this;
 	}
 	int bestWidthAtDepth(int depth) {
-
 		if (depth == top.depth_id)
 			return top.width_id;
 		else
@@ -305,8 +322,9 @@ public:
 		for (char pchar = 'A'; pchar <= 'P'; pchar++)
 			printf("%2C ", pchar);
 		cout << endl;
-		printf("evalCnt=%d myScore=%d opnScore=%d delta=%d",
-				evalCnt,myMoveAccScore,opnMoveAccScore,opnMoveAccScore-myMoveAccScore);
+		printf("evalCnt=%d myScore=%d opnScore=%d delta=%d", evalCnt,
+				myMoveAccScore, opnMoveAccScore,
+				opnMoveAccScore - myMoveAccScore);
 		cout << endl;
 	}
 
