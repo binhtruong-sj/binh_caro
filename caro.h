@@ -61,6 +61,7 @@
 struct hEntry {
 public:
 	int line;
+	int connected;
 	int bitcnt;
 	int score;
 	unsigned refcnt = 0;
@@ -74,7 +75,7 @@ public:
 	int swapcnt = 0;
 	hashTable();
 	void swap2e(int from, int to);
-	void addEntry(int line, int cnt, int score);
+	void addEntry(int line, int connected, int cnt, int score);
 	void print();
 };
 

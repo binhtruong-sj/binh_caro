@@ -232,7 +232,6 @@ Line caro::extractLine(int dir, int row, int col) {
 	int val, oppval;
 	val = board[row][col].val;
 
-	//oppval = (board[row][col].val == X_)? O_ : X_;
 	oppval = oppositeVal(board[row][col].val);
 
 	cell *currCell = &board[row][col];
@@ -242,6 +241,7 @@ Line caro::extractLine(int dir, int row, int col) {
 	// Scan for O_ (assuming X_ turn)
 	aline.blocked = 0;
 	int prevVal = 0;
+	aline.type = val;
 	for (int i = 0; i < SEARCH_DISTANCE; i++) {
 		if (currCell->val & oppval) {
 			if (prevVal & (currCell->val == oppval))
@@ -321,6 +321,7 @@ int Line::evaluate() {
 		return score = 0;
 	if (((connected >= 5) && (type == O_))
 			|| ((connected == 5) && (type == X_))) {
+
 		return MAGICNUMBER * 2;
 	}
 	int tval = val;
@@ -331,9 +332,9 @@ int Line::evaluate() {
 	score = //(connected - 1)*CONTINUOUS_BIAS +
 			(bitcnt * bitcnt * bitcnt * 5) / cnt;
 	if (connected == 4)
-		score <<= 1;
+		score *=2;
 #ifdef HASH
-	ahash.addEntry(val, cnt, score);
+	ahash.addEntry(val, connected, cnt, score);
 #endif
 	return score;
 }
@@ -400,7 +401,7 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 	scoreElement bestScore;
 	vector<scoreElement> aScoreArray;
 	int opnVal = oppositeVal(setVal);
-	int foundPath = -9999;
+	int foundPath = -8888;
 	int terminated = 0;
 	clearScore();
 
@@ -425,7 +426,10 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 			}
 		}
 	}
-
+	if (aDebug.enablePrinting) {
+		print(SYMBOLMODE);
+		print(SCOREMODE);
+	}
 // SORT
 	sort(aScoreArray.begin(), aScoreArray.end(), morecmp);
 	bestScore = aScoreArray[0]; // BestScore
@@ -456,18 +460,25 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 	}
 #endif
 	// debug stuff
+
+
 	if (foundPath == 0) {
-		printf("Found debug depth d =%d, w = %d", depth, currentWidth);
+		print(SYMBOLMODE);
+		print(SCOREMODE);
+
+		printf("Found debug depth d =%d, w = %d, %d", depth, currentWidth,
+				aDebug.debugWidthAtDepth[depth]);
 		cout << endl;
 
 		if (depth == aDebug.debugBreakAtDepth) {
-			cout << "Stopped at debugBreakAtDepth value = "
-					<< aDebug.debugBreakAtDepth;
+			cout << "Stopped at debugBreakAtDepth value d= " <<
+					depth << " " << aDebug.debugBreakAtDepth;
 			cout << endl;
 			aDebug.enablePrinting = 0;
 			prompt()
 			;
-		} else if (depth == (aDebug.debugBreakAtDepth - 1)) {
+		} else if (depth == (aDebug.debugBreakAtDepth + 1)) {
+			cout << "Enable debug printing " << endl;
 			aDebug.enablePrinting = 1;
 		}
 	}
@@ -545,7 +556,7 @@ void swap2E(hEntry &a, hEntry &b) {
 	a = b;
 	b = t;
 }
-void hashTable::addEntry(int line, int bitcnt, int score) {
+void hashTable::addEntry(int line, int connected, int bitcnt, int score) {
 	int i;
 	lowest = 99999999;
 	lowestI = 99999999;
@@ -567,6 +578,7 @@ void hashTable::addEntry(int line, int bitcnt, int score) {
 		cout << "hashE cnt too small" << endl;
 	} else {
 		arrayE[arrayE_cnt].line = line;
+		arrayE[arrayE_cnt].connected = connected;
 		arrayE[arrayE_cnt].bitcnt = bitcnt;
 		arrayE[arrayE_cnt].refcnt = 1;
 		arrayE[arrayE_cnt++].score = score;
@@ -578,14 +590,14 @@ void hashTable::print() {
 	cout << "Hash Table: count = " << arrayE_cnt << "swapcnt =" << swapcnt
 			<< endl;
 	swapcnt = 0;
-	printf("%4s %8s %8s %8s %8s %8s", "no", "Line", "bitcnt", "score", "RefCnt",
+	printf("%4s %8s %8s %8s %8s %8s %8s", "no", "Line", "connected","bitcnt", "score", "RefCnt",
 			"Binary");
 	cout << endl;
 	for (int i; i < arrayE_cnt; i++) {
 		char binary[9];
 		int val = arrayE[i].line;
 		toBinary(val, binary);
-		printf("%4d %8x %8d %8d %8d %8s\n", i, arrayE[i].line, arrayE[i].bitcnt,
-				arrayE[i].score, arrayE[i].refcnt, binary);
+		printf("%4d %8x %8d %8d %8d %8d %8s\n", i, arrayE[i].line, arrayE[i].connected,
+				arrayE[i].bitcnt, arrayE[i].score, arrayE[i].refcnt, binary);
 	}
 }
