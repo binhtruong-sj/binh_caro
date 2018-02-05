@@ -436,9 +436,7 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 	widthAtDepth[depth] = MIN(width, (int )aScoreArray.size()); // size of aScoreArray can be smaller than "width"
 #ifdef PRINTSCORE
 	if (currentWidth == aDebug.debugWidthAtDepth[depth]) {
-		if (terminated) {
-			aDebug.lowDepth = depth;
-		}
+
 
 		foundPath = 0;
 //		cout << "DEBUG at Depth " << depth << " at cw=" << currentWidth
@@ -492,6 +490,8 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 		breadCrumb myCrumb(depth - 1);
 
 		for (int i = 0; i < widthAtDepth[depth]; i++) {
+			aDebug.lowDepth = depth;
+
 			if (terminated)
 				break;
 			cPtr = aScoreArray[i].cellPtr;
@@ -503,7 +503,6 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 #ifdef PRINTSCORE
 			if (currentWidth == aDebug.debugWidthAtDepth[depth]) {
 				if (depth < aDebug.lowDepth) {
-					aDebug.lowDepth = depth;
 					cout << "lowest D=" << aDebug.lowDepth << endl;
 				}
 				aDebug.Array[depth][i].ts_ret = returnScore.val;

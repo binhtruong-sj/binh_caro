@@ -301,7 +301,6 @@ int main() {
 					col = name[0] - 'a' + 1;
 					agame.myVal = O_;
 					scoreElement result;
-					//			twoPass = 1;
 					cell * aptr = agame.setCell(X_, row, col, E_NEAR);
 					breadCrumb top_bc(depth); // at this level is depth+1
 					top_bc.top.ptr = aptr;
