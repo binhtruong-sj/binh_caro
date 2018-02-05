@@ -332,7 +332,7 @@ int Line::evaluate() {
 	score = //(connected - 1)*CONTINUOUS_BIAS +
 			(bitcnt * bitcnt * bitcnt * 5) / cnt;
 	if (connected == 4)
-		score *=2;
+		score *= 2;
 #ifdef HASH
 	ahash.addEntry(val, connected, cnt, score);
 #endif
@@ -378,9 +378,11 @@ int caro::score1Cell(int setVal, int row, int col) {
 		astar.score = -MAGICNUMBER;
 	else
 		astar.score = biasAdjust(myVal, setVal, astar.score, BIAS_PERCENT);
-	if ((astar.score >= MAGICNUMBER) && (setVal != myVal)) {
-		astar.score = -MAGICNUMBER;
-	}
+	/*
+	 if ((astar.score >= MAGICNUMBER) && (setVal != myVal)) {
+	 astar.score = -MAGICNUMBER;
+	 }
+	 */
 	board[row][col].score += astar.score * multiples;
 	if (setVal == myVal)
 		myMoveAccScore += astar.score * multiples;
@@ -395,7 +397,7 @@ bool morecmp(scoreElement &s1, scoreElement &s2) {
 	return (s1.val > s2.val);
 }
 scoreElement caro::evalAllCell(int setVal, int width, int depth,
-		int currentWidth, breadCrumb &parent) {
+		int currentWidth, bool maximizingPlayer, breadCrumb &parent) {
 
 	cell *cPtr;
 	scoreElement bestScore;
@@ -437,7 +439,6 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 #ifdef PRINTSCORE
 	if (currentWidth == aDebug.debugWidthAtDepth[depth]) {
 
-
 		foundPath = 0;
 //		cout << "DEBUG at Depth " << depth << " at cw=" << currentWidth
 //				<< ",dwad" << aDebug.debugWidthAtDepth[depth] << endl;
@@ -459,7 +460,6 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 #endif
 	// debug stuff
 
-
 	if (foundPath == 0) {
 		print(SYMBOLMODE);
 		print(SCOREMODE);
@@ -469,8 +469,8 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 		cout << endl;
 
 		if (depth == aDebug.debugBreakAtDepth) {
-			cout << "Stopped at debugBreakAtDepth value d= " <<
-					depth << " " << aDebug.debugBreakAtDepth;
+			cout << "Stopped at debugBreakAtDepth value d= " << depth << " "
+					<< aDebug.debugBreakAtDepth;
 			cout << endl;
 			aDebug.enablePrinting = 0;
 			prompt()
@@ -485,7 +485,10 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 	parent.top.ptr = aScoreArray[0].cellPtr;
 	parent.top.width_id = 0;
 	parent.top.depth_id = depth;
-
+	if (maximizingPlayer)
+		bestScore.val = -99999999;
+	else
+		bestScore.val = 99999999;
 	if (depth > 0) {
 		breadCrumb myCrumb(depth - 1);
 
@@ -499,7 +502,9 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 			setCell(setVal, cPtr->rowVal, cPtr->colVal, E_TNEAR);
 			///////
 			scoreElement returnScore = evalAllCell(opnVal, width, depth - 1,
-					i + foundPath, myCrumb);
+					i + foundPath, !maximizingPlayer, myCrumb);
+			aScoreArray[i].val = returnScore.val;
+
 #ifdef PRINTSCORE
 			if (currentWidth == aDebug.debugWidthAtDepth[depth]) {
 				if (depth < aDebug.lowDepth) {
@@ -508,15 +513,17 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 				aDebug.Array[depth][i].ts_ret = returnScore.val;
 			}
 #endif
-			if (returnScore.val >= bestScore.val) {
+			bool found_better =
+					maximizingPlayer ?
+							(returnScore.val >= bestScore.val) :
+							(returnScore.val < bestScore.val);
+
+			if ( found_better ) {
 				bestScore.val = returnScore.val;
 				bestScore.cellPtr = cPtr;
 				parent = myCrumb;
 				parent.top.ptr = aScoreArray[i].cellPtr;
 				parent.top.width_id = i;
-			}
-			if (returnScore.val >= aScoreArray[0].val) {
-				aScoreArray[0].val = returnScore.val;
 			}
 			restoreCell(saveVal, cPtr->rowVal, cPtr->colVal);
 			if (bestScore.val >= MAGICNUMBER) { // only quit searching when find winner
@@ -589,14 +596,15 @@ void hashTable::print() {
 	cout << "Hash Table: count = " << arrayE_cnt << "swapcnt =" << swapcnt
 			<< endl;
 	swapcnt = 0;
-	printf("%4s %8s %8s %8s %8s %8s %8s", "no", "Line", "connected","bitcnt", "score", "RefCnt",
-			"Binary");
+	printf("%4s %8s %8s %8s %8s %8s %8s", "no", "Line", "connected", "bitcnt",
+			"score", "RefCnt", "Binary");
 	cout << endl;
 	for (int i; i < arrayE_cnt; i++) {
 		char binary[9];
 		int val = arrayE[i].line;
 		toBinary(val, binary);
-		printf("%4d %8x %8d %8d %8d %8d %8s\n", i, arrayE[i].line, arrayE[i].connected,
-				arrayE[i].bitcnt, arrayE[i].score, arrayE[i].refcnt, binary);
+		printf("%4d %8x %8d %8d %8d %8d %8s\n", i, arrayE[i].line,
+				arrayE[i].connected, arrayE[i].bitcnt, arrayE[i].score,
+				arrayE[i].refcnt, binary);
 	}
 }

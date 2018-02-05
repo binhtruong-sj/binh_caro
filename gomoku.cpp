@@ -14,6 +14,8 @@ using namespace std;
 #include "caro.h"
 #define convertToRow(a) isalpha(a)? (islower(a)? (a-'a'+1):(a-'A'+1)):1
 #define FLIP(a) ((a=a^1)? "ON":"OFF")
+#define isX(a) a=='X'?X_:O_
+#define notisX(a) a=='X'?O_:X_
 /*
  * For the purpose of testing the code.  This is a textfile setting the game up
  * after setting,
@@ -71,6 +73,7 @@ int main() {
 	extern tsDebug aDebug;
 	extern int debugScoring, debugScoringE, debugHash, debugAI, debugAIbest;
 	int twoPass = 0;
+	bool maximizingPlayer = true;
 	extern hashTable ahash;
 	//agame.print();
 #if 1
@@ -140,9 +143,11 @@ int main() {
 				scoreElement result;
 				breadCrumb top_bc(depth);
 				if (testType[1] == 'X')
-					result = agame.evalAllCell(X_, width, depth, 0, top_bc); // width = dir; depth = row
+					result = agame.evalAllCell(X_, width, depth, 0,
+							!maximizingPlayer, top_bc); // width = dir; depth = row
 				else
-					result = agame.evalAllCell(O_, width, depth, 0, top_bc);
+					result = agame.evalAllCell(O_, width, depth, 0,
+							!maximizingPlayer, top_bc);
 				printf("Score=%x, row=%d, col=%C", result.val,
 						(result.cellPtr)->rowVal,
 						(result.cellPtr)->colVal - 1 + 'A');
@@ -165,7 +170,7 @@ int main() {
 				while (col < 20) {
 					int redo = 1;
 					do {
-						cout << "Enter row col " << endl;
+						cout << "Enter row col X/O" << endl;
 						cout
 								<< "-1 undo -2 redo -3 debugScoring, -4 debugScoringE,"
 								<< "-5 debugBestPath -6 debugHash, -7 debugAI, -11 debugwidth , -12 reset debug, -13 save "
@@ -297,11 +302,13 @@ int main() {
 						} else
 							redo = 0;
 					} while (redo);
-					cin >> name;
+					char gameCh;
+					cin >> name >> gameCh;
+
 					col = name[0] - 'a' + 1;
 					agame.myVal = O_;
 					scoreElement result;
-					cell * aptr = agame.setCell(X_, row, col, E_NEAR);
+					cell * aptr = agame.setCell(isX(gameCh), row, col, E_NEAR);
 					breadCrumb top_bc(depth); // at this level is depth+1
 					top_bc.top.ptr = aptr;
 					for (int passNo = 0; passNo <= twoPass; passNo++) {
@@ -315,7 +322,8 @@ int main() {
 						}
 						agame.evalCnt = agame.myMoveAccScore =
 								agame.opnMoveAccScore = 0;
-						result = agame.evalAllCell(O_, width, depth, 0, top_bc);
+						result = agame.evalAllCell(notisX(gameCh), width, depth, 0,
+								!maximizingPlayer, top_bc);
 						agame.print(SYMBOLMODE);
 						cout << top_bc << endl;
 						cout << "aDebug.debugWidthAtDepth ";
@@ -327,7 +335,7 @@ int main() {
 						}
 						cout << endl;
 					}
-					agame.setCell(O_, (result.cellPtr)->rowVal,
+					agame.setCell(notisX(gameCh), (result.cellPtr)->rowVal,
 							(result.cellPtr)->colVal, E_NEAR);
 					ahash.print();
 					if (twoPass) {

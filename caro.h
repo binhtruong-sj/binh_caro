@@ -352,7 +352,7 @@ public:
 	void clearScore();
 	Line extractLine(int dir, int x, int y);
 	int score1Cell(int setVal, int row, int col);
-	scoreElement evalAllCell(int val, int width, int depth, int currentWidth,
+	scoreElement evalAllCell(int val, int width, int depth, int currentWidth, bool maximizingPlayer,
 			breadCrumb &b);
 	scoreElement terminateScore;
 	void reset();
