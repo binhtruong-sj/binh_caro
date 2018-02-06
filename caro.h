@@ -173,14 +173,14 @@ public:
 	int lowDepth = 0;
 	tsDebug();
 	void print(int maxdepth, int widthAtDepth[], int bestWidthAtDepth[]) {
-		for (int d = maxdepth; d >= 0; d--) {
+		for (int d = maxdepth; d >= lowDepth; d--) {
 			cout << "Depth " << d << " Width=" << widthAtDepth[d] << " Best W:"
 					<< bestWidthAtDepth[d] << endl;
 			for (int w = 0; w < widthAtDepth[d]; w++) {
 				if (w % 4 == 0)
 					printf("\n\t");
 				cout << "<" << d << "," << w << ">";
-			//	cout << *Array[d][w].cellPtr;
+				cout << *Array[d][w].cellPtr;
 				printf("=$0x%x,ret$0x%x ", Array[d][w].val, Array[d][w].ts_ret);
 			}
 			cout << endl;

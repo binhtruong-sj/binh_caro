@@ -438,7 +438,6 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 	widthAtDepth[depth] = MIN(width, (int )aScoreArray.size()); // size of aScoreArray can be smaller than "width"
 #ifdef PRINTSCORE
 	if (currentWidth == aDebug.debugWidthAtDepth[depth]) {
-		cout << "FOUND PATH" << endl;
 		printf("at depth = %d, at width=%d debugWidthatDept=%d", depth,
 				currentWidth, aDebug.debugWidthAtDepth[depth]);
 		cout << endl;
@@ -446,10 +445,12 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 		if (debugScoring)
 			print(SCOREMODE);
 		for (int i = 0; i < widthAtDepth[depth]; i++) {
+			if (depth < aDebug.lowDepth)
+				aDebug.lowDepth = depth;
 			aDebug.Array[depth][i].val = aScoreArray[i].val;
 			aDebug.Array[depth][i].cellPtr = aScoreArray[i].cellPtr;
 			cPtr = aScoreArray[i].cellPtr;
-			if (debugScoring) {
+			if (debugScoring | debugScoringE) {
 				printf("<%d,%d>[%d%c]=$0x%x |", depth, i, cPtr->rowVal,
 						convertToCol(cPtr->colVal), aScoreArray[i].val);
 				if (i % 4 == 0)
@@ -495,7 +496,7 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 		breadCrumb myCrumb(depth - 1);
 
 		for (int i = 0; i < widthAtDepth[depth]; i++) {
-			aDebug.lowDepth = depth;
+
 			cPtr = aScoreArray[i].cellPtr;
 			int saveVal = cPtr->val;
 			setCell(setVal, cPtr->rowVal, cPtr->colVal, E_TNEAR);
@@ -505,9 +506,6 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 			aScoreArray[i].val = returnScore.val;
 #ifdef PRINTSCORE
 			if (currentWidth == aDebug.debugWidthAtDepth[depth]) {
-				if (depth < aDebug.lowDepth) {
-					cout << "lowest D=" << aDebug.lowDepth << endl;
-				}
 				aDebug.Array[depth][i].ts_ret = returnScore.val;
 			}
 #endif
@@ -516,8 +514,8 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 							(returnScore.val >= bestScore.val) :
 							(returnScore.val < bestScore.val);
 			if (found_better) {
-		//		printf("playing %d bs=%d , rs=%d\n", opnVal, bestScore.val,
-		//				returnScore.val);
+				//		printf("playing %d bs=%d , rs=%d\n", opnVal, bestScore.val,
+				//				returnScore.val);
 				bestScore.val = returnScore.val;
 				bestScore.cellPtr = cPtr;
 				parent = myCrumb;
