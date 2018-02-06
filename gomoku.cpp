@@ -322,7 +322,8 @@ int main() {
 						}
 						agame.evalCnt = agame.myMoveAccScore =
 								agame.opnMoveAccScore = 0;
-						result = agame.evalAllCell(notisX(gameCh), width, depth, 0,
+						result = agame.evalAllCell(notisX(gameCh), width, depth,
+								aDebug.debugWidthAtDepth[depth],
 								!maximizingPlayer, top_bc);
 						agame.print(SYMBOLMODE);
 						cout << top_bc << endl;
@@ -330,7 +331,7 @@ int main() {
 						for (int d = depth - 1; d >= 0; d--) {
 							aDebug.debugWidthAtDepth[d] =
 									top_bc.bestWidthAtDepth(d);
-							cout << "d=" << d << "w="
+							cout << "  d=" << d << "w="
 									<< aDebug.debugWidthAtDepth[d];
 						}
 						cout << endl;
