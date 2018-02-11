@@ -23,18 +23,29 @@ using namespace std;
 //#define VERBOSE2 1
 #define VERBOSE0 1
 #define HASH 1
-#define MAGICNUMBER 99999
+#define MAGICNUMBER 99990
 #define PRINTSCORE 1
-#define prompt(a) {cout << a << endl; cout << "Hit Enter Key" << endl; cin.get(); }
+#define prompt(a) {cout << a << endl; cin.get(); }
+#define percentAdjust(val,percent) (val*percent)/128
 
 #include "caro.h"
 int search_depth = 5;
 int search_width = 5;
 
+int adjustCntArray[] = { 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+		128, 128, 128, 128 };
+int bitcntArray[] = { 0, 0, 16, 38, 300, 699, 999, 999, 999, 999, 999 };
+#define BIAS_PERCENT 110  // 10% more than opponent
+#define biasDefendAdjust(val) val*BIAS_PERCENT/128
+
 tsDebug aDebug, bestScoreDebug;
 int gdebug = 0;
 int debugScoring = 0;
-int debugScoringE = 0;
+int debugScoringd = 0;
+int debugScoringAll = 0;
+int debugAllPaths = 0;
+
+int debugBestPath = 0;
 int debugHash = 0;
 int debugAI = 0;
 int debugAIbest = 0;
@@ -66,21 +77,6 @@ tsDebug::tsDebug() {
 			Array[i][j].cellPtr = nullptr;
 		}
 	}
-}
-
-void cell::print(int mode) {
-	if (mode == 0) {
-		printf("%2X", val);
-	} else if (mode == SYMBOLMODE) {
-		char ach = (char) convertCellToStr(val);
-		printf("%2c ", ach);
-	} else {
-		printf("%2x ", score);
-	}
-}
-
-void cell::print() {
-	cout << val;
 }
 
 void caro::reset() {
@@ -227,48 +223,83 @@ Line caro::extractLine(int dir, int row, int col) {
 	int bitcnt = 0;
 	aline.val = 0;
 	aline.cnt = 0;
+	int unconnected = 0;
+
 	// first scan for 1 set, bound by oposite or upto 8 total, bound by 3 spaces or 1 opposite
 	// then scan for these special case X?xX?X, X?XxX?X
 	int val, oppval;
 	val = board[row][col].val;
-
+	bool debugLine = debugScoringAll || cdbg.ifMatch(&board[row][col], -1, 1);
 	oppval = oppositeVal(board[row][col].val);
 
 	cell *currCell = &board[row][col];
 	cell *oriCell = currCell;
-	cell *backoffCell;
+	cell *backoffCell;	//, *lastone;
+	//currCell = currCell->near_ptr[ReverseDirection(dir)];
 
 	// Scan for O_ (assuming X_ turn)
+
 	aline.blocked = 0;
-	int prevVal = 0;
+	bool prevVal = false;
 	aline.type = val;
+//	debugLine = true;
+
+	if (debugLine) {
+		cout << "Dir=" << dir << " myVal=" << myVal << " val=" << val;
+		cout << endl << board[row][col] << " --> ";
+	}
+//	lastone = currCell;
+	int spaced = 0;
 	for (int i = 0; i < SEARCH_DISTANCE; i++) {
+		if (debugLine) {
+			currCell->printid();
+			currCell->print(SYMBOLMODE);
+		}
+		prevVal = currCell->val == val;
 		if (currCell->val & oppval) {
 			if (prevVal & (currCell->val == oppval))
 				aline.blocked = 1;
 			break;
+		} else if (currCell->val == val) {
+			backoffCell = currCell;
+		} else {
+			if (spaced++ > 1)
+				break;
 		}
-		backoffCell = currCell;
-		prevVal = currCell->val == val;
 		currCell = currCell->near_ptr[dir];
-
 	}
-	if (aline.blocked) {
+	//prompt("hit Enter q");
+	if (aline.blocked || (spaced > 2)) {
 		currCell = backoffCell;
 	} else {
 		// Did not find O_, switch back to ori and scan in reverse
 		currCell = oriCell;
 		dir = ReverseDirection(dir);
+		if (debugLine) {
+			cout << endl << board[row][col] << " <-- ";
+		}
+		int spaced = 0;
+
 		for (int i = 0; i < SEARCH_DISTANCE; i++) {
+			if (debugLine) {
+				currCell->printid();
+				currCell->print(SYMBOLMODE);
+			}
+			prevVal = currCell->val == val;
 			if (currCell->val & oppval) {
 				if (prevVal & (currCell->val == oppval))
 					aline.blocked = 1;
 				break;
+			} else if (currCell->val == val) {
+				backoffCell = currCell;
+			} else {
+				if (spaced++ > 1)
+					break;
 			}
-			backoffCell = currCell;
-			prevVal = currCell->val == val;
 			currCell = currCell->near_ptr[dir];
 		}
+		//	prompt("hit Enter q2");
+
 		currCell = backoffCell;
 	}
 
@@ -278,19 +309,33 @@ Line caro::extractLine(int dir, int row, int col) {
 	aline.val = 0;
 	aline.connected = 0;
 	int save = 0;
-	for (int i = 0; i < (SEARCH_DISTANCE * 2 - 1); i++) {
+	if (debugLine) {
+		cout << endl << board[row][col] << " --> ";
+	}
+	int marked = 0;
+	for (int i = 0; i < (SEARCH_DISTANCE); i++) {
+		if (debugLine) {
+			currCell->printid();
+			currCell->print(SYMBOLMODE);
+		}
 		aline.val = aline.val << 1;
 		aline.cnt++;
 		prevVal = currCell->val == val;
 		if (currCell->val == val) {
-
 			bitcnt++;
 			aline.val = aline.val | 0x1;
-			aline.connected++;
+			if (unconnected == 1) {
+				aline.connected = save + 1;
+				marked++;
+			} else
+				aline.connected++;
+			unconnected = 0;
 		} else {
 			if (aline.connected > save)
 				save = aline.connected;
 			aline.connected = 0;
+			if (unconnected++ > 2)
+				break;
 		}
 		currCell = currCell->near_ptr[dir];
 		if (currCell->val & oppval) {
@@ -299,16 +344,25 @@ Line caro::extractLine(int dir, int row, int col) {
 			break;
 		}
 	}
+	if ((aline.connected == 4) && (marked >= 1))
+		aline.connected--;
 
+	if (debugLine) {
+		cout << endl << aline << endl;
+	}
 	if (save > aline.connected)
 		aline.connected = save;
-	if (aline.cnt >= 5)
+	if (aline.cnt > 8)
+		aline.cnt = 8;
+	if (aline.cnt >= 5) {
 		if (bitcnt <= 4)
-			aline.connected = bitcnt - aline.blocked;
-		else
-			aline.connected = bitcnt;
-	else
+			aline.connected -= aline.blocked;
+	} else
 		aline.connected = 0;
+
+	if ((val == myVal) && (aline.connected > 0))
+		aline.connected--; // go first, assume that opponent to block  (1 less)
+
 	return aline;
 }
 
@@ -326,11 +380,16 @@ int Line::evaluate() {
 	}
 	int tval = val;
 	while (tval) {
-		bitcnt = bitcnt + (tval & 1);
+		bitcnt = bitcnt + (tval & 1); // recalculate bitcnt
 		tval = tval >> 1;
 	}
-	score = //(connected - 1)*CONTINUOUS_BIAS +
-			(bitcnt * bitcnt * 5) / cnt;
+	/*
+	 score = //(connected - 1)*CONTINUOUS_BIAS +
+	 (bitcnt * bitcnt * bitcnt * 5) / cnt;
+	 */
+	score = (bitcntArray[connected] + (bitcnt - connected)) * 128;
+	score = percentAdjust(score, adjustCntArray[bitcnt]);
+
 	if (connected == 4)
 		score *= 2;
 #ifdef HASH
@@ -345,27 +404,25 @@ void FourLines::print() {
 	}
 }
 
-int caro::score1Cell(int setVal, int row, int col) {
+int caro::score1Cell(int setVal, int row, int col, int depth) {
 	FourLines astar;
 	astar.score = 0;
 	int saveVal = board[row][col].val;
 	int ill_6, ill_4, ill_3;
 	ill_6 = ill_4 = ill_3 = 0;
 	setCell(setVal, row, col, E_TNEAR);
-	int multiples = 0;
 	for (int dir = East; dir < West; dir++) {
 		evalCnt++;
 		astar.Xlines[dir] = extractLine(dir, row, col);
 		int tscore = astar.Xlines[dir].evaluate();
+		//	if (aDebug.enablePrinting||cdbg.ifMatch(&board[row][col],depth,0)) {
 		if (aDebug.enablePrinting) {
 			cout << board[row][col] << "dir=" << dir;
 			cout << astar.Xlines[dir] << endl;
 			if (aDebug.printCnt++ % 40 == 0)
-				prompt(" ");
+				prompt("Hit Enter Key");
 		}
 		astar.score = astar.score + tscore;
-		if (tscore)
-			multiples++;
 		if (astar.Xlines[dir].connected >= 6)
 			ill_6 = 1;
 		if (astar.Xlines[dir].connected == 3)
@@ -375,51 +432,56 @@ int caro::score1Cell(int setVal, int row, int col) {
 	}
 	if ((ill_6 || (ill_4 > 2) || (ill_3 > 2)) && setVal == X_)
 		astar.score = -MAGICNUMBER;
-	else
-		astar.score = biasAdjust(myVal, setVal, astar.score, BIAS_PERCENT);
-	/*
-	 if ((astar.score >= MAGICNUMBER) && (setVal != myVal)) {
-	 astar.score = -MAGICNUMBER;
-	 }
-	 */
-	board[row][col].score += astar.score * multiples;
+	//else
+	//	astar.score = biasAdjust(myVal, setVal, astar.score, BIAS_PERCENT);
+
+	board[row][col].score += astar.score;
 	if (setVal == myVal)
-		myMoveAccScore += astar.score * multiples;
+		myMoveAccScore += astar.score;
 	else
-		opnMoveAccScore += astar.score * multiples;
+		opnMoveAccScore += astar.score;
 
 	restoreCell(saveVal, row, col);
 
+	// opponent is playing second, hence lower score
+	if (setVal != myVal)
+		astar.score = biasDefendAdjust(astar.score);
 	return astar.score;
 }
 bool morecmp(scoreElement &s1, scoreElement &s2) {
 	return (s1.val > s2.val);
 }
+/*
+ *
+ *
+ */
 scoreElement caro::evalAllCell(int setVal, int width, int depth,
 		int currentWidth, bool maximizingPlayer, breadCrumb &parent) {
 
 	cell *cPtr;
-	scoreElement bestScore;
-	vector<scoreElement> aScoreArray;
+	scoreElement bestScore, returnScore;
+	vector<scoreElement> aScoreArray, returnScoreArray;
 	int opnVal = oppositeVal(setVal);
 	int foundPath = -8888;
 	int terminated = 0;
 	clearScore();
-
 	for (int row = 1; row < size; row++) {
 		for (int col = 1; col < size; col++) {
 			if (terminated)
 				break;
 			if (board[row][col].val & (E_NEAR | E_TNEAR)) {
-				int returnVal = score1Cell(setVal, row, col);
+				int returnVal = score1Cell(setVal, row, col, depth);
 				bestScore.val = returnVal;
 				if (abs(returnVal) >= MAGICNUMBER) {
 					terminated = 1; // not sure about this.  Terminate too early is foily. Keep on going, and calculate best position is better.
 				} else {
-					returnVal = bestScore.val + score1Cell(opnVal, row, col);
+					returnVal = bestScore.val
+							+ score1Cell(opnVal, row, col, depth);
 					bestScore.val = returnVal;
 				}
 				if (abs(returnVal) >= MAGICNUMBER) {
+					//			cout <<"\n\t\t\t\tb\n";
+
 					terminated = 1;
 				}
 				bestScore.cellPtr = &board[row][col];
@@ -428,54 +490,49 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 		}
 	}
 
-	if (aDebug.enablePrinting) {
-		print(SYMBOLMODE);
-		print(SCOREMODE);
-	}
 // SORT
 	sort(aScoreArray.begin(), aScoreArray.end(), morecmp);
 	bestScore = aScoreArray[0]; // BestScore
 	widthAtDepth[depth] = MIN(width, (int )aScoreArray.size()); // size of aScoreArray can be smaller than "width"
 #ifdef PRINTSCORE
-	if (currentWidth == aDebug.debugWidthAtDepth[depth]) {
+	if (debugScoringd || debugScoringAll || debugAllPaths
+			|| (currentWidth == aDebug.debugWidthAtDepth[depth])) {
 		printf("at depth = %d, at width=%d debugWidthatDept=%d", depth,
 				currentWidth, aDebug.debugWidthAtDepth[depth]);
 		cout << endl;
 		foundPath = 0;
-		if (debugScoring)
-			print(SCOREMODE);
 		for (int i = 0; i < widthAtDepth[depth]; i++) {
+			returnScoreArray.push_back(aScoreArray[i]); // initialize with prelim score
+
 			if (depth < aDebug.lowDepth)
 				aDebug.lowDepth = depth;
 			aDebug.Array[depth][i].val = aScoreArray[i].val;
 			aDebug.Array[depth][i].cellPtr = aScoreArray[i].cellPtr;
 			cPtr = aScoreArray[i].cellPtr;
-			if (debugScoring | debugScoringE) {
-				printf("<%d,%d>[%d%c]=$0x%x |", depth, i, cPtr->rowVal,
-						convertToCol(cPtr->colVal), aScoreArray[i].val);
-				if (i % 4 == 0)
-					printf("\n\t");
+			if (debugScoring || debugBestPath || debugScoringAll
+					|| debugAllPaths) {
+				printf("\t<%d,%d>", depth, i);
+				cPtr->printid();
+				printf("%C=$0x%x |", convertCellToStr(setVal),
+						aScoreArray[i].val / 128);
+				if (i % 2 == 0)
+					printf("\n");
 			}
 		}
-		//cout << endl;
 	}
 #endif
 	// debug stuff
 
 	if (foundPath == 0) {
-		print(SYMBOLMODE);
-		print(SCOREMODE);
-
 		printf("Found debug depth d =%d, w = %d, %d", depth, currentWidth,
 				aDebug.debugWidthAtDepth[depth]);
 		cout << endl;
-
 		if (depth == aDebug.debugBreakAtDepth) {
 			cout << "Stopped at debugBreakAtDepth value d= " << depth << " "
 					<< aDebug.debugBreakAtDepth;
 			cout << endl;
 			aDebug.enablePrinting = 0;
-			prompt(" ");
+			prompt(" Hit Enter Key ");
 		} else if (depth == (aDebug.debugBreakAtDepth + 1)) {
 			cout << "Enable debug printing " << endl;
 			aDebug.enablePrinting = 1;
@@ -486,23 +543,44 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 	parent.top.ptr = aScoreArray[0].cellPtr;
 	parent.top.width_id = 0;
 	parent.top.depth_id = depth;
+	parent.top.val = setVal;
 	bestScore = aScoreArray[0];
-
+	if (foundPath != -1234) {
+		if (terminated)
+			cout << "Terminated at d=" << depth << " w=" << currentWidth
+					<< endl;
+	}
 	if ((terminated == 0) && (depth > 0)) {
 		if (maximizingPlayer)
 			bestScore.val = -99999999;
 		else
 			bestScore.val = 99999999;
 		breadCrumb myCrumb(depth - 1);
-
 		for (int i = 0; i < widthAtDepth[depth]; i++) {
 
+			/*
+			 printf("d=%d,w=%d%c  ",depth,i,convertToChar(setVal));
+			 if((depth-prevD)>3)
+			 cout << endl;
+			 */
+			prevD = depth;
 			cPtr = aScoreArray[i].cellPtr;
 			int saveVal = cPtr->val;
 			setCell(setVal, cPtr->rowVal, cPtr->colVal, E_TNEAR);
+
 			///////
-			scoreElement returnScore = evalAllCell(opnVal, width, depth - 1,
-					i + foundPath, !maximizingPlayer, myCrumb);
+			returnScore = evalAllCell(opnVal, width, depth - 1, i + foundPath,
+					!maximizingPlayer, myCrumb);
+			if (debugScoringd || (foundPath == 0)) {
+				printf("[%d,%d]", depth, i);
+				print(SYMBOLMODE);
+				print(SCOREMODE);
+				if (debugScoringd || debugAllPaths)
+					prompt("hit enter");
+			}
+			if (foundPath == 0) {
+				returnScoreArray[i] = returnScore;
+			}
 			aScoreArray[i].val = returnScore.val;
 #ifdef PRINTSCORE
 			if (currentWidth == aDebug.debugWidthAtDepth[depth]) {
@@ -517,7 +595,7 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 				//		printf("playing %d bs=%d , rs=%d\n", opnVal, bestScore.val,
 				//				returnScore.val);
 				bestScore.val = returnScore.val;
-				bestScore.cellPtr = cPtr;
+				bestScore.cellPtr = aScoreArray[i].cellPtr;
 				parent = myCrumb;
 				parent.top.ptr = aScoreArray[i].cellPtr;
 				parent.top.width_id = i;
@@ -531,27 +609,44 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 
 			 }
 			 */
+			/*
+			 if (maximizingPlayer & (returnScore.val >= MAGICNUMBER)) {
+			 //	cout <<"\n\t\t\tB"<<endl;
+			 break;//  <<<<<<----------- critical
+			 }
+			 */
 		}
-		if (foundPath >= 0) {
+// TODO scoring for opponent cause the MAX value, but not bc of winning!!! it is fair for calculating best move
+// but for miniMax purpose. Dont want to return that value to calling function. ???
+		if (foundPath == 0) {
+			if (maximizingPlayer)
+				cout << "Max ";
+			else
+				cout << "Mini";
 			for (int i = 0; i < widthAtDepth[depth]; i++) {
 				cPtr = aDebug.Array[depth][i].cellPtr;
-				if (debugScoring) {
-					printf("<<%d,%d>>[%d%c]=$0x%x |", depth, i, cPtr->rowVal,
-							convertToCol(cPtr->colVal),
-							aDebug.Array[depth][i].ts_ret);
-					if (i % 4 == 0)
-						printf("\n\t");
+				if (debugScoring || debugBestPath || debugScoringAll
+						|| debugAllPaths) {
+					printf("\t<<%d,%d>>", depth, i);
+					cPtr->printid();
+					printf("%C| ", convertCellToStr(setVal));
+					cout << returnScoreArray[i] << "\t";
+
+					if (i % 2 == 0)
+						printf("\n");
 				}
 			}
-			//	cout << endl;
+			cout << " bestScore=" << bestScore;
+			cout << endl;
 		}
 
 	}
-	if (setCellCnt == 0) {
-		print(SCOREMODE);
-		print(SYMBOLMODE);
-	}
-
+	/*
+	 if (setCellCnt == 0) {
+	 print(SCOREMODE);
+	 print(SYMBOLMODE);
+	 }
+	 */
 	return bestScore;
 }
 
@@ -582,7 +677,7 @@ void hashTable::addEntry(int line, int connected, int bitcnt, int score) {
 			return;
 		}
 	}
-	if (i > 1000) {
+	if (i > 1280) {
 		cout << "hashE cnt too small" << endl;
 	} else {
 		arrayE[arrayE_cnt].line = line;

@@ -24,6 +24,15 @@ using namespace std;
  * testing format: Direction row col (direction>7 terminate the test)
  *
  */
+void help() {
+	cout << "-3 debugScoring " << endl
+			<< "-4 debugBestPath specify path for debug, and at which depth to "
+			<< endl << "display detail of line scoring " << endl
+			<< "-11 debug line scoring" << endl
+			<< "-23 debugScoringd, like best path, but for all instead" << endl
+			<< "-24 display score for every move" << endl;
+
+}
 void getInput(FILE *finput, caro *agame) {
 	char aline[80], *cptr;
 	int row, col;
@@ -71,7 +80,8 @@ int main() {
 	int depth = 5;
 	extern int search_depth, search_width;
 	extern tsDebug aDebug;
-	extern int debugScoring, debugScoringE, debugHash, debugAI, debugAIbest;
+	extern int debugScoring, debugScoringd, debugScoringAll, debugBestPath,debugAllPaths,
+			debugAI, debugAIbest;
 	int twoPass = 0;
 	bool maximizingPlayer = true;
 	extern hashTable ahash;
@@ -107,8 +117,19 @@ int main() {
 			case 'q':
 				break;
 			case 'e':
-				tempLine = agame.extractLine(dir, row, col);
-				tempLine.print();
+				do {
+					cout << "enter X dir row col" << endl;
+					scanf("%s %d %d %c", testType, &dir, &row, name);
+					col = convertToRow(name[0]);
+					cout << row << " " << col << "name=" << name << testType << endl;
+					agame.setCell(isX(testType[0]), row, col, E_NEAR);
+					agame.print(SYMBOLMODE);
+
+					tempLine = agame.extractLine(dir, row, col);
+					tempLine.print();
+					agame.restoreCell(0, row, col);
+
+				} while (dir < 10);
 				break;
 			case '4': {
 				FourLines astar;
@@ -126,12 +147,12 @@ int main() {
 				break;
 
 			case 'X': // score 1 cell
-				cout << "Score " << agame.score1Cell(X_, row, col)
+				cout << "Score " << agame.score1Cell(X_, row, col, 0)
 						<< " for X at row " << row << "col " << col << endl;
 				agame.print(SCOREMODE);
 				break;
 			case 'O': // score 1 cell
-				cout << "Score " << agame.score1Cell(O_, row, col)
+				cout << "Score " << agame.score1Cell(O_, row, col, 0)
 						<< " for O at row " << row << "col " << col << endl;
 				agame.print(SCOREMODE);
 				break;
@@ -166,31 +187,45 @@ int main() {
 				depth = search_depth;
 
 			case 'g':
-				aDebug.debugBreakAtDepth = -1;
+				aDebug.debugBreakAtDepth = -12345;
 				while (col < 20) {
 					int redo = 1;
 					do {
+
 						cout << "Enter row col X/O" << endl;
 						cout
-								<< "-1 undo -2 redo -3 debugScoring, -4 debugScoringE,"
-								<< "-5 debugBestPath -6 debugHash, -7 debugAI, -11 debugwidth , -12 reset debug, -13 save "
-								<< endl;
+								<< "-1 undo -2 redo -3 debugScoring, -4 debugBestPath,"
+								<< "-5 debugBestPath -6 debugAllPaths, -7 debugAI, -11 cells , "
+								<< "-12 reset debug, -13 save -23 debugScoringd -24 debugScoringAll "
+								<< " enter ? on col for details" << endl;
 
 						cin >> row;
 						if (row <= -1) {
+							agame.cdbg.reset();
+
 							switch (row) {
 							case -11: {
-								int debug_d, debug_w;
-								cout << "Enter Depth";
-								cin >> debug_d;
-								cout << "Enter Width" << endl;
-								cin >> debug_w;
-								aDebug.debugWidthAtDepth[debug_d] = debug_w;
-								for (int i = search_depth; i >= 0; i--) {
-									printf("D=%d,W=%d ", i,
-											aDebug.debugWidthAtDepth[i]);
-								}
-								cout << endl;
+								int row, col;
+								char ccol[10];
+								int depth, debugLine;
+								agame.cdbg.reset();
+
+								do {
+									cout << "Enter row:  (-1 to quit)";
+									cin >> row;
+									if (row < 0)
+										break;
+									cout << "Enter col: ";
+									cin >> ccol;
+									col = ccol[0] - 'a' + 1;
+									cout << "Enter Depth: ";
+									cin >> depth;
+									cout << "Enter debugLine: ";
+									cin >> debugLine;
+									agame.cdbg.add(&agame.board[row][col],
+											depth, debugLine);
+
+								} while (row > 0);
 								break;
 							}
 							case -12:
@@ -229,6 +264,17 @@ int main() {
 								}
 							}
 								break;
+							case -23:
+								cout << "Turn " << FLIP(debugScoringd)
+										<< " debugScoringd" << endl;
+
+								break;
+							case -24:
+								cout << "Turn " << FLIP(debugScoringAll)
+										<< " debugScoringAll" << endl;
+
+								break;
+
 							case -3:
 								cout << "Turn " << FLIP(debugScoring)
 										<< " debugScoring" << endl;
@@ -236,9 +282,11 @@ int main() {
 								break;
 
 							case -4:
-								cout << "Turn " << FLIP(debugScoringE)
-										<< " debugScoringE" << endl;
-								if (debugScoringE) {
+								agame.cdbg.reset();
+
+								cout << "Turn " << FLIP(debugBestPath)
+										<< " debugBestPath" << endl;
+								if (debugBestPath) {
 									cout
 											<< "Enter debug width ID at each depth ";
 									for (int i = depth; i >= 0; i--) {
@@ -251,23 +299,29 @@ int main() {
 									cout
 											<< "Enter depth # to break for prompt: ";
 									cin >> aDebug.debugBreakAtDepth;
-									aDebug.enablePrinting = 0;
+									if (aDebug.debugBreakAtDepth == (depth))
+										aDebug.enablePrinting = 1;
+									else
+										aDebug.enablePrinting = 0;
 								}
 								break;
 							case -5:
-								cout << "Turn " << FLIP(debugScoringE)
-										<< " debugScoringBest" << endl;
-								if (debugScoringE)
+								agame.cdbg.reset();
+
+								cout << "Turn " << FLIP(debugBestPath)
+										<< " debugBestPath" << endl;
+								if (debugBestPath)
 									twoPass = 1;
 								else
 									twoPass = 0;
 								for (int i = depth; i >= 0; i--) {
 									aDebug.debugWidthAtDepth[i] = -1;
 								}
+								aDebug.debugBreakAtDepth = -10;
 								break;
 							case -6:
-								cout << "Turn " << FLIP(debugHash)
-										<< " debugHash" << endl;
+								cout << "Turn " << FLIP(debugAllPaths)
+										<< " debugAllPaths" << endl;
 								if (row == -5) {
 									cout << "Turn " << FLIP(debugAIbest)
 											<< " debugAIbest" << endl;
@@ -304,6 +358,8 @@ int main() {
 					} while (redo);
 					char gameCh;
 					cin >> name >> gameCh;
+					if (name[0] == '?')
+						help();
 
 					col = name[0] - 'a' + 1;
 					agame.myVal = O_;
@@ -315,6 +371,8 @@ int main() {
 						cout << "Pass no " << passNo << endl;
 						agame.terminate = 0;
 						if (twoPass & (passNo == 0)) {
+							agame.cdbg.reset();
+
 							aDebug.lowDepth = depth + 1;
 							for (int d = depth; d >= 0; d--) {
 								aDebug.debugWidthAtDepth[d] = -999;
@@ -322,18 +380,25 @@ int main() {
 						}
 						agame.evalCnt = agame.myMoveAccScore =
 								agame.opnMoveAccScore = 0;
+						agame.myVal = notisX(gameCh);
+						int tw =
+								passNo > 0 ?
+										aDebug.debugWidthAtDepth[depth] : 0;
 						result = agame.evalAllCell(notisX(gameCh), width, depth,
-								aDebug.debugWidthAtDepth[depth],
-								!maximizingPlayer, top_bc);
+								tw, !maximizingPlayer, top_bc);
 						agame.print(SYMBOLMODE);
+						aDebug.enablePrinting = 0;
+
 						cout << top_bc << endl;
-						cout << "aDebug.debugWidthAtDepth ";
+						cout << "aDebug.debugWidthAtDepth " << endl;
 						for (int d = depth - 1; d >= 0; d--) {
 							aDebug.debugWidthAtDepth[d] =
-									top_bc.bestWidthAtDepth(d);
+									top_bc.bestWidthAtDepth(d + 1); // from the higher best
+							agame.cdbg.add(top_bc.bestCellAtDepth(d + 1), d, 0);
 							cout << "  d=" << d << "w="
 									<< aDebug.debugWidthAtDepth[d];
 						}
+						//		agame.cdbg.add(top_bc.bestCellAtDepth(0), 0, 0);
 						cout << endl;
 					}
 					agame.setCell(notisX(gameCh), (result.cellPtr)->rowVal,
@@ -341,6 +406,7 @@ int main() {
 					ahash.print();
 					if (twoPass) {
 						cout << "lowestD=" << aDebug.lowDepth << endl;
+						cout << top_bc << endl;
 						aDebug.print(depth, agame.widthAtDepth,
 								aDebug.debugWidthAtDepth);
 					}

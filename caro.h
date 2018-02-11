@@ -28,13 +28,13 @@
 #define printInterval 100000
 #define MAXDEPTH 41
 #define InspectDistance 3
-#define SEARCH_DISTANCE 4
-#define ReverseDirection(a) (a<4)? (a+4):(a-4)
+#define SEARCH_DISTANCE 7
+#define ReverseDirection(a) (a+4)%8
 //#define oppositeVal(a) a^0x3
 #define oppositeVal(a) a==X_?O_:X_
 #define myTurn(a) a%2
-#define biasAdjust(favor_val, val,score,percent) (val == favor_val) ? ((score*percent)/100): score
-#define BIAS_PERCENT 92
+//#define biasAdjust(favor_val, val,score,percent) (val == favor_val) ? ((score*percent)/100): score
+
 #define MAXWIDTH 50
 #define CONTINUOUS_BIAS 1
 
@@ -57,7 +57,8 @@
 /*
  * Line for the purpose of scoring
  */
-
+using std::hex;
+using std::showbase;
 struct hEntry {
 public:
 	int line;
@@ -95,17 +96,16 @@ public:
 		toBinary(v.val, binary);
 		out << "Line=" << binary << " Cnt=" << v.cnt;
 		out << " Blocked=" << v.blocked << " Connected=" << v.connected;
-		out << " Score = " << v.score;
+		out << " Score = " << hex << v.score;
 		return out;
 	}
-
 
 	int evaluate();
 	void print() {
 		char binary[9];
 		toBinary(val, binary);
-		printf("Line=%s Cnt=%d blocked=%d connected =%d Score=%d", binary, cnt,
-				blocked, connected, score);
+		printf("Line=%s Cnt=%d blocked=%d connected =%d Score=0x%x", binary,
+				cnt, blocked, connected, score);
 		cout << endl;
 	}
 };
@@ -135,14 +135,39 @@ class cell: public cellV {
 public:
 	int rowVal, colVal, score = 0;
 	cell *near_ptr[8];
-	void print(int mode);
-	void print();
+	void print() {
+		cout << val;
+	}
+
+	void print(int mode) {
+		if (mode == 0) {
+			printf("%2X", val);
+		} else if (mode == SYMBOLMODE) {
+			char ach = (char) convertCellToStr(val);
+			printf("%2c ", ach);
+		} else {
+			printf("%2x ", score / 100);
+		}
+	}
+
 	void printid() {
 		printf("[%d%c]", rowVal, convertToCol(colVal));
 	}
+
 	friend ostream & operator <<(ostream &out, cell &c) {
-		out << "[" << c.rowVal << convertToCol(c.colVal) << "]";
+		out << "[" << c.rowVal
+				<< convertToCol(c.colVal) << "]" << convertCellToStr(c.val);
 		return out;
+	}
+
+	bool operator ==(cell &lookUpCell) {
+		/*
+		 printf("Comparing Cell ");
+		 lookUpCell.printid();
+		 cout << "===" ;
+		 printid();
+		 */
+		return ((lookUpCell.rowVal == rowVal) && (lookUpCell.colVal == colVal));
 	}
 };
 
@@ -150,6 +175,17 @@ class scoreElement {
 public:
 	int val;
 	cell *cellPtr = nullptr;
+	friend ostream & operator <<(ostream &out, scoreElement &c) {
+		out << *c.cellPtr;
+		printf("0x%X", c.val/128);
+		return out;
+	}
+	scoreElement & operator=(const scoreElement & other) {
+		val = other.val;
+		cellPtr = other.cellPtr;
+		return *this;
+	}
+
 };
 
 class tScore: public scoreElement {
@@ -175,27 +211,29 @@ public:
 	void print(int maxdepth, int widthAtDepth[], int bestWidthAtDepth[]) {
 		for (int d = maxdepth; d >= lowDepth; d--) {
 			cout << "Depth " << d << " Width=" << widthAtDepth[d] << " Best W:"
-					<< bestWidthAtDepth[d] << endl;
+					<< bestWidthAtDepth[d];
 			for (int w = 0; w < widthAtDepth[d]; w++) {
-				if (w % 4 == 0)
-					printf("\n\t");
-				cout << "<" << d << "," << w << ">";
+				if (w % 2 == 0)
+					printf("\n");
+				cout << "\t<" << d << "," << w << ">";
 				cout << *Array[d][w].cellPtr;
-				printf("=$0x%x,ret$0x%x ", Array[d][w].val, Array[d][w].ts_ret);
+				printf("=$0x%x,ret$0x%x ", Array[d][w].val/128, Array[d][w].ts_ret/128);
 			}
 			cout << endl;
 		}
 	}
 };
-class acrumb {
+class acrumb: public cellV {
 public:
 	int width_id, depth_id;
+
 	cell *ptr = nullptr;
 	friend ostream & operator <<(ostream &out, const acrumb &c) {
 		out << "{w=" << c.width_id << " d=" << c.depth_id << " ";
-		if (c.ptr)
+		if (c.ptr) {
 			c.ptr->printid();
-		else
+			out << convertCellToStr(c.val);
+		} else
 			out << "NULL ";
 		cout << "}";
 		return out;
@@ -245,8 +283,45 @@ public:
 		else
 			return array[depth].width_id;
 	}
+	cell * bestCellAtDepth(int depth) {
+		if (depth == top.depth_id)
+			return top.ptr;
+		else
+			return array[depth].ptr;
+	}
 };
+class cellDebug {
+	cell *debugCell[40];
+	int dcDepth[40];
+	int dcDline[40];
+	int debugCnt = 0;
 
+public:
+	void reset() {
+		debugCnt = 0;
+	}
+	void add(cell * dcell, int depth, int debugLine) {
+		if (dcell) {
+			cout << "add entry to cdb cnt=" << debugCnt << *dcell << endl;
+
+			debugCell[debugCnt] = dcell;
+			dcDepth[debugCnt] = depth;
+			dcDline[debugCnt] = debugLine;
+			debugCnt++;
+		}
+	}
+	bool ifMatch(cell * lookupCell, int depth, int dcl) {
+		for (int i = 0; i < debugCnt; i++) {
+			if (depth < 0) {
+				if ((dcl == dcDline[i]) && (*lookupCell == *debugCell[i]))
+					return true;
+			} else if ((dcl == dcDline[i]) && (depth == dcDepth[i])
+					&& (*lookupCell == *debugCell[i]))
+				return true;
+		}
+		return false;
+	}
+};
 /*
  * caro table can be upto 20x20.  However 15x15 is more fair to O'x
  * size-2 is the size of the game; 0 and size-1 are used for boundary cells
@@ -255,6 +330,7 @@ public:
 class caro {
 public:
 	cell board[21][21];
+	int prevD;
 	int evalCnt = 0;
 	int myMoveAccScore = 0;
 	int opnMoveAccScore = 0;
@@ -294,6 +370,8 @@ public:
 			}
 		}
 	}
+	;
+
 	virtual ~caro();
 	friend ostream & operator <<(ostream &out, const caro &c) {
 		out << endl;
@@ -351,10 +429,11 @@ public:
 
 	void clearScore();
 	Line extractLine(int dir, int x, int y);
-	int score1Cell(int setVal, int row, int col);
-	scoreElement evalAllCell(int val, int width, int depth, int currentWidth, bool maximizingPlayer,
-			breadCrumb &b);
+	int score1Cell(int setVal, int row, int col, int depth);
+	scoreElement evalAllCell(int val, int width, int depth, int currentWidth,
+			bool maximizingPlayer, breadCrumb &b);
 	scoreElement terminateScore;
+	cellDebug cdbg;
 	void reset();
 };
 
