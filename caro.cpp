@@ -74,12 +74,6 @@ int debugAIbest = 0;
 int debugRow, debugCol;
 int interactiveDebug;
 
-cell * last2[256]; // fixed at 256, change to use remeainder if different setting
-int last2v[256];
-int last2p = 0;
-int saveLast2p;
-int moveCnt = 0;
-
 tScore::tScore() {
 	val = 0;
 	defVal = 0;
@@ -129,75 +123,10 @@ void caro::clearScore() {
 			board[row][col].score.defVal = 0;
 		}
 }
-/*
- * set a cell to X or O
- */
-cell * caro::setCell(int setVal, int row, int col, int near) {
-	if ((board[row][col].val & 0x3) == 0) {
-		if (setCellCnt++ == printInterval) {
-			setCellCnt = 0;
-		}
-		if (near == E_NEAR) { // Only real set can be UNDO
-			evalCnt = 0;
-			myMoveAccScore = 0;
-			opnMoveAccScore = 0;
-			moveCnt++;
-			last2p = (last2p + 1) & 0xFF;
-			saveLast2p = last2p;
-			last2[last2p] = &board[row][col];
-			last2v[last2p] = board[row][col].val;
-		}
-		board[row][col].val = setVal;
-		board[row][col].score = {0,0};
-		setNEAR(row, col, near);
-		return &board[row][col];
-	} else
-		return nullptr;
-}
 
 /*
  * Marking need-to-evaluate white spaces, these are nearby the X's and O's
  */
-// TODO problem with recalculate function, not clear that bit
-/*
- * Temporary near marking set when traverse further ahead
- */
-void caro::setNEAR(int row, int col, int near) {
-	cell *currCell;
-	for (int dir = East; dir <= SEast; dir++) {
-		currCell = &board[row][col];
-		for (int i = 0; i < InspectDistance; i++) {
-			currCell = currCell->near_ptr[dir];
-			currCell->val = currCell->val & ~(E_CAL);
-
-			if ((currCell->val & 0x3) == 0x3)
-				break;
-			else if ((currCell->val & (O_ | X_ | E_NEAR)) == 0) {
-				currCell->val = near;
-			}
-		}
-	}
-}
-/*
- * After temporary setting a Cell to X' or O' for scoring, now return it and its neighbor to prev values
- */
-cell * caro::restoreCell(int saveVal, int row, int col) {
-	cell *currCell;
-	board[row][col].val = saveVal; // Return the val to prev
-
-	for (int dir = East; dir <= SEast; dir++) {
-		currCell = &board[row][col];
-		for (int i = 0; i < InspectDistance; i++) {
-			currCell = currCell->near_ptr[dir];
-			if (currCell->val & E_TNEAR) {
-				currCell->val = currCell->val & ~(E_CAL);
-				currCell->score= {0,0};
-				currCell->val = E_FAR; // only clear the cell with E_TNEAR (temporary NEAR) to FAR
-			}
-		}
-	}
-	return currCell;
-}
 
 void caro::undo1move() {
 	cout << "Undo p=" << last2p;
@@ -332,7 +261,8 @@ Line caro::extractLine(int inVal, int dir, int row, int col) {
 	}
 	int marked = 0;
 	for (int i = 0; i < (SEARCH_DISTANCE); i++) {
-
+		if (debugLine)
+			cout << *currCell << "-";
 		aline.val = aline.val << 1;
 		aline.cnt++;
 		prevVal = currCell->val == val;
@@ -391,8 +321,8 @@ Line caro::extractLine(int inVal, int dir, int row, int col) {
 }
 
 int Line::evaluate() {
-	// rudimentary scoring -- need to change to hybrid table lookup + fallback rudimentary (that
-	// self learning)
+// rudimentary scoring -- need to change to hybrid table lookup + fallback rudimentary (that
+// self learning)
 	score = 0;
 	int bitcnt = 0;
 	if (cnt < 5)
@@ -423,69 +353,111 @@ void FourLines::print() {
 
 aScore caro::score1Cell(int inVal, int row, int col, int depth) {
 	FourLines astar;
-	aScore saveScores[8][InspectDistance], s1Score;
-	int saveVals[8][InspectDistance], s1Val;
+	aScore rtn;
 
+	bool saveCheck = false;
+	bool redothisone = false;
+	aScore testSaveScore = { 0, 0 };
 	if (board[row][col].val & E_CAL) {
-		//	cout << "skip score1cell, score =" << board[row][col].score;
 		skipcnt++;
-		//	return board[row][col].score;
+
+		return board[row][col].score;
+
+		saveCheck = true;
+		//	cout << "skip score1cell, score =" << board[row][col].score;
+		testSaveScore = board[row][col].score;
 	}
 	scorecnt++;
-	int scores[2] = { 0, 0 };
-	int opnVal = oppositeVal(myVal);
-	int tempVal[2];
-	tempVal[0] = myVal;
-	tempVal[1] = opnVal;
+	do {
+		int scores[2] = { 0, 0 };
+		int opnVal = oppositeVal(myVal);
+		int tempVal[2];
+		tempVal[0] = myVal;
+		tempVal[1] = opnVal;
 
-	saveScoreVal(row, col, saveScores, s1Score, saveVals, s1Val);
-	for (int j = 0; j < 2; j++) {
-		int setVal = tempVal[j];
+		//	saveScoreVal(row, col, saveScores, saveVals);
 		int saveVal = board[row][col].val;
-		int ill_6, ill_4, ill_3;
-		ill_6 = ill_4 = ill_3 = 0;
-		setCell(setVal, row, col, E_FAR);
-		for (int dir = East; dir < West; dir++) {
-			evalCnt++;
-			astar.Xlines[dir] = extractLine(inVal, dir, row, col);
-			int tscore = astar.Xlines[dir].evaluate();
-			//	if (aDebug.enablePrinting||cdbg.ifMatch(&board[row][col],depth,0)) {
-			if (aDebug.enablePrinting || debugScoringAll || debugScoringd) {
-				cout << board[row][col] << "dir=" << dir;
-				cout << astar.Xlines[dir] << endl;
-				if (aDebug.printCnt++ % 40 == 0)
-					prompt("Hit Enter Key");
+
+		for (int j = 0; j < 2; j++) {
+			int setVal = tempVal[j];
+			int ill_6, ill_4, ill_3;
+			ill_6 = ill_4 = ill_3 = 0;
+			setCell(setVal, row, col, E_FAR);
+			for (int dir = East; dir < West; dir++) {
+				evalCnt++;
+				astar.Xlines[dir] = extractLine(inVal, dir, row, col);
+				int tscore = astar.Xlines[dir].evaluate();
+				//	if (aDebug.enablePrinting||cdbg.ifMatch(&board[row][col],depth,0)) {
+				if (aDebug.enablePrinting || debugScoringAll || debugScoringd) {
+					cout << board[row][col] << "dir=" << dir;
+					cout << astar.Xlines[dir] << endl;
+					if (aDebug.printCnt++ % 40 == 0)
+						prompt("Hit Enter Key");
+				}
+				//	cout << tscore << "=" << scores[j] << "+" << dir << "+ ";
+				scores[j] = scores[j] + tscore;
+				if (astar.Xlines[dir].connected >= 6 * 2)
+					ill_6 = 1;
+				if (astar.Xlines[dir].connected == 3 * 2)
+					ill_3++;
+				if (astar.Xlines[dir].connected == 4 * 2)
+					ill_4++;
 			}
-			//	cout << tscore << "=" << scores[j] << "+" << dir << "+ ";
-			scores[j] = scores[j] + tscore;
-			if (astar.Xlines[dir].connected >= 6 * 2)
-				ill_6 = 1;
-			if (astar.Xlines[dir].connected == 3 * 2)
-				ill_3++;
-			if (astar.Xlines[dir].connected == 4 * 2)
-				ill_4++;
+			if ((ill_6 || (ill_4 > 2) || (ill_3 > 2)) && setVal == X_)
+				scores[j] = 0; //-0x200; TODO
+
+			if (setVal == myVal)
+				myMoveAccScore += scores[j];
+			else
+				opnMoveAccScore += scores[j];
+			// doing this here intead of after for loop bc of how setcell works
+			board[row][col].val = saveVal;
 		}
-		if ((ill_6 || (ill_4 > 2) || (ill_3 > 2)) && setVal == X_)
-			scores[j] = 0; //-0x200; TODO
 
-		if (setVal == myVal)
-			myMoveAccScore += scores[j];
-		else
-			opnMoveAccScore += scores[j];
+		rtn.val = scores[0];
+		rtn.defVal = scores[1];
+		board[row][col].score = rtn;
+		board[row][col].val |= E_CAL; // will not be re-evaluate
+		/* TODO: still have problem with E_CAL, too few saving
+		 *
+		 */
 
-		restoreCell(saveVal, row, col);
-	}
-	// opponent is playing second, hence lower score
-//	restoreScoreVal(row, col, saveScores, s1Score, saveVals, s1Val);
+		if (saveCheck) {
+			if (redothisone) {
+				debugScoringAll = 0;
+				redothisone = false;
+				break;
+			}
+			if (!(testSaveScore == rtn)) {
 
-	aScore rtn;
-	rtn.val = scores[0];
-	rtn.defVal = scores[1];
-	board[row][col].score = rtn;
-	board[row][col].val |= E_CAL; // will not be re-evaluate
+				cout << "SHORTCUT different, saveScore =" << testSaveScore
+						<< " newScore =" << rtn;
+				printDebugInfo(row, col);
+				print(SYMBOLMODE);
 
+				char ach;
+				cin >> ach;
+				redothisone = true;
+				debugScoringAll = 1;
+			}
+		} else {
+			/*
+			 cout << board[row][col] << rtn ;
+			 cout << "LastCell =" << *lastCell << "T-" << hex << lastCellType << " " <<endl;
+			 */
+		}
+
+	} while (redothisone);
 	return rtn;
 }
+
+/*
+ *
+ *
+ *
+ *
+ *
+ */
 bool betterMove(scoreElement & a, scoreElement & b) {
 	return ((a.val + a.defVal) > (b.val + b.defVal));
 }
@@ -493,6 +465,74 @@ bool betterValue(scoreElement & a, scoreElement & b) {
 	return ((a.val - a.defVal) > (b.val - b.defVal));
 }
 /*
+ *
+ *
+ *
+ */
+void caro::modifyDebugFeatures(int debugId) {
+	char ffn[80] = "savefile.txt";
+
+	switch (debugId) {
+
+	case -23:
+		cout << "Turn " << FLIP(debugScoringd) << " debugScoringd" << endl;
+
+		break;
+	case -24:
+		cout << "Turn " << FLIP(debugScoringAll) << " debugScoringAll" << endl;
+
+		break;
+	case -25:
+		cout << "Turn " << FLIP(debugHash) << " debugHash" << endl;
+
+		break;
+
+	case -3:
+		cout << "Turn " << FLIP(debugScoring) << " debugScoring" << endl;
+
+		break;
+	case -99:
+		cout << "Turn " << FLIP(interactiveDebug) << " interactiveDebug"
+				<< endl;
+		break;
+	case -13:
+
+		for (int i = 1; i < 1000; i++) {
+			sprintf(ffn, "savefile%d.txt", i);
+
+			cout << "filename =" << ffn;
+			ifstream ifile(ffn);
+			if (ifile) {
+				ifile.close();
+				continue;
+			}
+			ofstream ofile(ffn);
+			if (ofile) {
+				char ans[80];
+				cout << " Writing to " << ffn << " ?" << endl;
+				cin >> ans;
+				if ((ans[0] == 'n') || (ans[0] == 'N')) {
+					ofile.close();
+					continue;
+				}
+				ofile << *this;
+				cout << *this;
+				ofile.close();
+				break;
+			}
+		}
+	default:
+		break;
+	}
+}
+/*
+ *
+ *
+ *
+ *
+ *
+ *
+ *
  *
  *
  */
@@ -508,20 +548,20 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 	int terminated = 0;
 	int debugId = 99999;
 	bool redoNext;
+
+	if (0) {
+		print(SYMBOLMODE);
+		print(SCOREMODE);
+
+		char ach;
+		cin >> ach;
+	}
 	for (int row = 1; row < size; row++) {
 		for (int col = 1; col < size; col++) {
 			if (terminated)
 				break;
 			if (board[row][col].val & (E_NEAR | E_TNEAR)) {
 				bestScore = score1Cell(setVal, row, col, depth);
-				{
-					cout << board[row][col];
-					print(SYMBOLMODE);
-					print(SCOREMODE);
-
-					char ach;
-					cin >> ach;
-				}
 				if (debugScoring) {
 					cout << board[row][col] << "score=" << bestScore << endl;
 				}
@@ -536,6 +576,13 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 				bestScoreArray.push_back(bestScore);
 			}
 		}
+	}
+	if (0) {
+		print(SYMBOLMODE);
+		print(SCOREMODE);
+
+		char ach;
+		cin >> ach;
 	}
 // SORT picking the best move. NOT bestValue
 	sort(bestScoreArray.begin(), bestScoreArray.end(), betterMove);
@@ -579,85 +626,20 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 				cout << bestScoreArray[i] << "|";
 				if (i % 2 == 0)
 					printf("\n");
-
 			}
 		}
 		if (debugThis) {
 			do {
 				cout << endl << "Enter # for debug" << endl;
 				cin >> debugId;
-
 				if (debugId < 0) {
-					switch (debugId) {
-
-					case -23:
-						cout << "Turn " << FLIP(debugScoringd)
-								<< " debugScoringd" << endl;
-
-						break;
-					case -24:
-						cout << "Turn " << FLIP(debugScoringAll)
-								<< " debugScoringAll" << endl;
-
-						break;
-					case -25:
-						cout << "Turn " << FLIP(debugHash) << " debugHash"
-								<< endl;
-
-						break;
-
-					case -3:
-						cout << "Turn " << FLIP(debugScoring) << " debugScoring"
-								<< endl;
-
-						break;
-					case -99:
-						cout << "Turn " << FLIP(interactiveDebug)
-								<< " interactiveDebug" << endl;
-						break;
-					case -13: {
-						char ffn[80] = "savefile.txt";
-						for (int i = 1; i < 1000; i++) {
-							sprintf(ffn, "savefile%d.txt", i);
-
-							cout << "filename =" << ffn;
-							ifstream ifile(ffn);
-							if (ifile) {
-								ifile.close();
-								continue;
-							}
-							ofstream ofile(ffn);
-							if (ofile) {
-								char ans[80];
-								cout << " Writing to " << ffn << " ?" << endl;
-								cin >> ans;
-								if ((ans[0] == 'n') || (ans[0] == 'N')) {
-									ofile.close();
-									continue;
-								}
-								ofile << *this;
-								cout << *this;
-								ofile.close();
-								break;
-							}
-
-						}
-					}
-
-					default:
-						break;
-					}
+					modifyDebugFeatures(debugId);
 				}
 			} while (debugId < 0);
 		}
-
-		/*
-		 if (debugScoringd || debugAllPaths)
-		 prompt("hit enter");
-		 */
 	}
 #endif
-	// debug stuff
+// debug stuff
 
 	if (foundPath == 0) {
 		printf("Found debug depth d =%d, w = %d, %d", depth, currentWidth,
@@ -696,7 +678,6 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 			breadCrumb myCrumb(depth - 1);
 
 			for (int i = 0; i < widthAtDepth[depth]; i++) {
-// TODO working on adding defense score to scoreElement
 				/*
 				 printf("d=%d,w=%d%c  ",depth,i,convertToChar(setVal));
 				 if((depth-prevD)>3)
@@ -704,26 +685,51 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 				 */
 				prevD = depth;
 				cPtr = bestScoreArray[i].cellPtr;
-				int saveVal = cPtr->val;
-				setCell(setVal, cPtr->rowVal, cPtr->colVal, E_TNEAR);
+				if(debugThis) {
+					cout << "--------------------------------------"<< *cPtr << endl;
+				}
+				aScore saveScores[8][saveRestoreDist],s1Score;
+				int saveVals[8][saveRestoreDist],s1Val;
+
+				saveScoreVal( cPtr->rowVal, cPtr->colVal,
+						saveScores, s1Score,
+						saveVals,s1Val);
 
 				///////
 				trace.push_back((unsigned char)i);
-
+				cdebug.tracePush(i);
 				redoNext = false;
+				if(cdebug.traceMatch(cPtr->rowVal, cPtr->colVal)) {
+
+					char ach;
+					print(SYMBOLMODE);
+					cout << "---------------------------TRACE MATCH---------------" << endl;
+					cin >> ach;
+				}
+				setCell(setVal, cPtr->rowVal, cPtr->colVal, E_TNEAR);
+				if(cdebug.traceMatch(cPtr->rowVal, cPtr->colVal)) {
+					char ach;
+					print(SYMBOLMODE);
+					cout << "---------------------------TRACE MATCH---------------" << endl;
+
+					cin >> ach;
+				}
 				do {
 					bool debugNext = (debugId == i);
 					returnScore = evalAllCell(opnVal, width, depth - 1, i + foundPath,
 							!maximizingPlayer, myCrumb,debugNext, redoNext);
 				}while(redoNext);
+				cdebug.tracePop();
+
 				trace.pop_back();
+
 				/*
 				 if (foundPath == 0) {
 				 returnScoreArray[i].score(returnScore);
 				 }
 				 */
 				if (foundPath == 0) returnScoreArray[i] = returnScore;
-
+// TODO setcell at 10F didnt work right
 				//bestScoreArray[i] = returnScore;
 #ifdef PRINTSCORE
 				if (currentWidth == aDebug.debugWidthAtDepth[depth]) {
@@ -751,7 +757,12 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 					//		prompt("found better");
 
 				}
-				restoreCell(saveVal, cPtr->rowVal, cPtr->colVal);
+			//	restoreCell(saveVal, cPtr->rowVal, cPtr->colVal);
+
+				 restoreScoreVal( cPtr->rowVal, cPtr->colVal,
+				 saveScores, s1Score,
+				 saveVals,s1Val);
+
 				if (bestScore.getScore(setVal,myVal) >= MAGICNUMBER) {
 					// quit if setVal's score is MAGIC
 					// cout << "Terminated" << endl;

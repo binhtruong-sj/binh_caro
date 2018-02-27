@@ -98,6 +98,7 @@ int main() {
 	cin >> aname;
 	string fn = "testinput.txt";
 	fn = fn + aname;
+	cout << fn << endl;
 	finput = fopen(fn.c_str(), "r");
 	for (int i = search_depth; i >= 0; i--) {
 		aDebug.debugWidthAtDepth[i] = -9999;
@@ -139,13 +140,13 @@ int main() {
 			case '4': {
 				FourLines astar;
 				for (int dir = 0; dir < 4; dir++) {
-					astar.Xlines[dir] = agame.extractLine(X_,dir, row, col);
+					astar.Xlines[dir] = agame.extractLine(X_, dir, row, col);
 				}
 				astar.print();
 				break;
 			}
 			case 's': {
-				Line tempLine = agame.extractLine(X_,dir, row, col);
+				Line tempLine = agame.extractLine(X_, dir, row, col);
 				tempLine.evaluate();
 				tempLine.print();
 			}
@@ -154,7 +155,7 @@ int main() {
 			case 'X': // score 1 cell
 				debugScoringAll = 1;
 				cout << "Score ";
-				cout << agame.score1Cell(X_,row, col, 0);
+				cout << agame.score1Cell(X_, row, col, 0);
 				cout << " for X at row " << row;
 				cout << "col " << convertToChar(col) << endl;
 				agame.print(SCOREMODE);
@@ -162,7 +163,7 @@ int main() {
 			case 'O': // score 1 cell
 				debugScoringAll = 1;
 
-				cout << "Score " << agame.score1Cell(O_,row, col, 0)
+				cout << "Score " << agame.score1Cell(O_, row, col, 0)
 						<< " for O at row " << row << "col "
 						<< convertToChar(col) << endl;
 				agame.print(SCOREMODE);
@@ -208,7 +209,8 @@ int main() {
 						cout << "Enter row col X/O" << endl;
 						cout
 								<< "-1 undo -2 redo -3 debugScoring, -4 debugBestPath,"
-								<< "-5 debugBestPath -6 debugAllPaths, -7 debugAI, -11 cells , "
+								<< "-5 debugBestPath -6 debugAllPaths, -7 debugAI, "
+								<< "-10 TRACE-debug -11 cells , "
 								<< "-12 reset debug, -13 save -23 debugScoringd -24 debugScoringAll"
 								<< " -25 debugHash -99 interactiveDebug "
 								<< " enter ? on col for details" << endl;
@@ -218,6 +220,16 @@ int main() {
 							agame.cdbg.reset();
 
 							switch (row) {
+							case -10: {
+								char adebugstr[40];
+								cout << "Enter TRACE debug:";
+								cin >> adebugstr;
+								agame.cdebug.enterDebugTrace(adebugstr);
+								cout << "Enter Cellinfo:";
+								cin >> adebugstr;
+								agame.cdebug.enterDebugCell(adebugstr);
+								break;
+							}
 							case -11: {
 								int row, col;
 								char ccol[10];
@@ -410,7 +422,7 @@ int main() {
 										aDebug.debugWidthAtDepth[depth] : 0;
 						agame.trace.clear();
 						{
-							bool debugThis;
+							bool debugThis = false;
 
 							if (interactiveDebug) {
 								debugThis = true;
