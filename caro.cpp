@@ -757,11 +757,11 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 					//		prompt("found better");
 
 				}
-			//	restoreCell(saveVal, cPtr->rowVal, cPtr->colVal);
+				//	restoreCell(saveVal, cPtr->rowVal, cPtr->colVal);
 
-				 restoreScoreVal( cPtr->rowVal, cPtr->colVal,
-				 saveScores, s1Score,
-				 saveVals,s1Val);
+				restoreScoreVal( cPtr->rowVal, cPtr->colVal,
+						saveScores, s1Score,
+						saveVals,s1Val);
 
 				if (bestScore.getScore(setVal,myVal) >= MAGICNUMBER) {
 					// quit if setVal's score is MAGIC
@@ -796,14 +796,15 @@ scoreElement caro::evalAllCell(int setVal, int width, int depth,
 
 					}
 				}
-				cout << " bestScore=" << bestScore;
-				cout << endl;
-				cout << "Redo?" << endl;
-				char redoCh;
-				cin >> redoCh;
-				redo = ((redoCh=='Y')||(redoCh=='y'));
-
 				if(debugThis) {
+
+					cout << " bestScore=" << bestScore;
+					cout << endl;
+					cout << "Redo?" << endl;
+					char redoCh;
+					cin >> redoCh;
+					redo = ((redoCh=='Y')||(redoCh=='y'));
+
 					print(SYMBOLMODE);
 					print(SCOREMODE);
 				}
