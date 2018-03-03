@@ -55,6 +55,7 @@
 								}\
 								binary[8]= 0;}
 #define MIN(a,b) (a<b) ? a:b
+#define MAX(a,b) (a>b) ? a:b
 #define convertToChar(setVal) (setVal == X_ ? 'X' : 'O')
 #define convertToCol(col) ((char)(col-1+'a'))
 #define convertCellToStr(val) (char) ((val == X_) ? 'X' : \
@@ -148,7 +149,7 @@ public:
 		return out;
 	}
 
-	int evaluate();
+	int evaluate(bool ending);
 	void print() {
 		char binary[9];
 		toBinary(val, binary);
@@ -208,11 +209,8 @@ public:
 			return;
 		}
 		case (SYMBOLMODE + 1): {
-			if ((score.val + score.defVal) > 0)
-				printf("%3x ", score.val + score.defVal);
-			else
-				printf("    ");
-			return;
+				pval = score.val + score.defVal;
+			break;
 		}
 		case SYMBOLMODE2: {
 			char ach = (char) convertCellToStr(val);
@@ -220,11 +218,8 @@ public:
 			return;
 		}
 		case (SYMBOLMODE2 + 1): {
-			if ((score.val - score.defVal) != 0)
-				printf("%3x ", score.val - score.defVal);
-			else
-				printf("    ");
-			return;
+			pval = score.val - score.defVal;
+			break;
 		}
 		case SCOREMODE: // myVal
 			pval = score.val;
@@ -242,7 +237,10 @@ public:
 			break;
 		}
 		if (pval)
-			printf("%3x ", (0xFFF & (pval)));
+			if (pval > 0xFFF)
+				cout << "FFF ";
+			else
+				printf("%3x ", (0xFFF & (pval)));
 		else {
 			if ((mode % 2) == 0)
 				printf("  . ");
@@ -276,6 +274,14 @@ public:
 class scoreElement: public aScore {
 public:
 	cell *cellPtr = nullptr;
+	friend ostream & operator <<(ostream &output,
+			vector<scoreElement> &values) {
+		for (auto const& value : values) {
+			output << value << std::endl;
+		}
+		return output;
+
+	}
 	friend ostream & operator <<(ostream &out, scoreElement &c) {
 		out << *c.cellPtr;
 		out << hex << (c.val) << "," << hex << (c.defVal) << " ";
@@ -683,7 +689,8 @@ public:
 				do {
 					currCell = currCell->near_ptr[dir];
 					rval = currCell->val & (X_ | O_);
-					if(rval) i = 0;
+					if (rval)
+						i = 0;
 				} while ((rval != 3) && rval);
 				currCell->val = currCell->val & ~(E_CAL);
 				if ((currCell->val & (O_ | X_ | E_NEAR)) == 0)
@@ -706,7 +713,8 @@ public:
 				do {
 					currCell = currCell->near_ptr[dir];
 					rval = currCell->val & (X_ | O_);
-					if(rval) i = 0;
+					if (rval)
+						i = 0;
 
 				} while ((rval != 3) && rval);
 				if (currCell->val & (E_TNEAR)) {
@@ -770,21 +778,21 @@ public:
 		cdebug.printTrace();
 		cout << " " << board[row][col] << endl;
 		printTrace();
-		cout << "Last2Cell =" << *last2Cell << "T2-" << hex << last2CellType
-				<< " " << endl;
-		cout << "LastCell =" << *lastCell << "T-" << hex << lastCellType << " "
-				<< endl;
-		cout << board[row][col];
+		cout << "LastCell =" << *lastCell << "T-" << hex << lastCellType;
+
+		cout << "-Last 2nd Cell =" << *last2Cell << "T2-" << hex
+				<< last2CellType << endl;
 	}
 	void modifyDebugFeatures(int a);
 	void undo1move();
 	void redo1move();
 
 	void clearScore();
-	Line extractLine(int inVal, int dir, int x, int y);
-	aScore score1Cell(int setVal, int row, int col, int depth);
+	Line extractLine(int inVal, int dir, int x, int y,bool &ending,bool debugThis);
+	aScore score1Cell(int setVal, int row, int col, int depth,bool debugThis);
 	scoreElement evalAllCell(int val, int width, int depth, int currentWidth,
-			bool maximizingPlayer, breadCrumb &b, bool debugThis, bool &redo);
+			bool maximizingPlayer, int alpha, int beta, breadCrumb &b,
+			bool debugThis, bool &redo);
 	scoreElement terminateScore;
 	cellDebug cdbg;
 	void reset();

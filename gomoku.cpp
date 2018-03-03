@@ -15,6 +15,8 @@ using namespace std;
 #define convertToRow(a) isalpha(a)? (islower(a)? (a-'a'+1):(a-'A'+1)):1
 #define isX(a) a=='X'?X_:O_
 #define notisX(a) a=='X'?O_:X_
+#define INF 999999999
+#define NINF -INF
 /*
  * For the purpose of testing the code.  This is a textfile setting the game up
  * after setting,
@@ -105,6 +107,8 @@ int main() {
 	}
 	aDebug.debugWidthAtDepth[search_depth] = 0;
 	if (finput) {
+		bool ending = false;
+
 		getInput(finput, &agame);
 		agame.clearScore();
 
@@ -131,7 +135,8 @@ int main() {
 					agame.setCell(isX(testType[0]), row, col, E_NEAR);
 					agame.print(SYMBOLMODE);
 
-					tempLine = agame.extractLine(X_, dir, row, col);
+					tempLine = agame.extractLine(X_, dir, row, col, ending,
+							true);
 					tempLine.print();
 					agame.restoreCell(0, row, col);
 
@@ -140,14 +145,16 @@ int main() {
 			case '4': {
 				FourLines astar;
 				for (int dir = 0; dir < 4; dir++) {
-					astar.Xlines[dir] = agame.extractLine(X_, dir, row, col);
+					astar.Xlines[dir] = agame.extractLine(X_, dir, row, col,
+							ending, true);
 				}
 				astar.print();
 				break;
 			}
 			case 's': {
-				Line tempLine = agame.extractLine(X_, dir, row, col);
-				tempLine.evaluate();
+				Line tempLine = agame.extractLine(X_, dir, row, col, ending,
+						true);
+				tempLine.evaluate(ending);
 				tempLine.print();
 			}
 				break;
@@ -155,7 +162,7 @@ int main() {
 			case 'X': // score 1 cell
 				debugScoringAll = 1;
 				cout << "Score ";
-				cout << agame.score1Cell(X_, row, col, 0);
+				cout << agame.score1Cell(X_, row, col, 0,true);
 				cout << " for X at row " << row;
 				cout << "col " << convertToChar(col) << endl;
 				agame.print(SCOREMODE);
@@ -163,7 +170,7 @@ int main() {
 			case 'O': // score 1 cell
 				debugScoringAll = 1;
 
-				cout << "Score " << agame.score1Cell(O_, row, col, 0)
+				cout << "Score " << agame.score1Cell(O_, row, col, 0, true)
 						<< " for O at row " << row << "col "
 						<< convertToChar(col) << endl;
 				agame.print(SCOREMODE);
@@ -177,10 +184,12 @@ int main() {
 				breadCrumb top_bc(depth);
 				if (testType[1] == 'X')
 					result = agame.evalAllCell(X_, width, depth, 0,
-							!maximizingPlayer, top_bc, false, redonext); // width = dir; depth = row
+							!maximizingPlayer, NINF, INF, top_bc, false,
+							redonext); // width = dir; depth = row
 				else
 					result = agame.evalAllCell(O_, width, depth, 0,
-							!maximizingPlayer, top_bc, false, redonext);
+							!maximizingPlayer, NINF, INF, top_bc, false,
+							redonext);
 				printf("Score=%x, row=%d, col=%C", result.val,
 						(result.cellPtr)->rowVal,
 						(result.cellPtr)->colVal - 1 + 'A');
@@ -408,7 +417,6 @@ int main() {
 						agame.terminate = 0;
 						if (twoPass & (passNo == 0)) {
 							agame.cdbg.reset();
-
 							aDebug.lowDepth = depth + 1;
 							for (int d = depth; d >= 0; d--) {
 								aDebug.debugWidthAtDepth[d] = -999;
@@ -432,7 +440,7 @@ int main() {
 								agame.scorecnt = agame.skipcnt = 0;
 								result = agame.evalAllCell(notisX(gameCh),
 										width, depth, tw, maximizingPlayer,
-										top_bc, debugThis, redonext);
+										NINF, INF, top_bc, debugThis, redonext);
 							} while (redonext);
 
 						}
