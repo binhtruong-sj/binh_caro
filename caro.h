@@ -43,8 +43,9 @@
 
 #define SYMBOLMODE 0
 #define SYMBOLMODE2 2
+#define SYMBOLMODE3 4
 
-#define SCOREMODE 4
+#define SCOREMODE 6
 
 #define SCOREMODEm 8
 
@@ -139,6 +140,7 @@ public:
 	int cnt = 0; // how many X_
 	int connected; // How long is the longest connected X_
 	int blocked; // is it blocked by O_ (next to an X_).
+	int offset; // to add or subtract to scoring
 	int type; // X_ or O_ are being search
 	friend ostream & operator <<(ostream & out, Line & v) {
 		char binary[9];
@@ -190,6 +192,23 @@ public:
 		cout << val;
 	}
 
+	void print(int v, int num) {
+		if (val & (X_ | O_)) {
+			char ach = (char) convertCellToStr(val);
+			if (num < 0)
+				printf("%3c ", ach);
+			else
+				printf("%2d%c ", num, ach);
+		} else {
+			char ach = (char) convertCellToStr(v);
+			if (num < 0)
+				printf("%3c ", '-');
+			else
+				printf("%2d%c ", num, ach);
+		}
+		return;
+	}
+
 	void print(int mode) {
 		int pval;
 		if (val & (X_ | O_)) {
@@ -209,8 +228,7 @@ public:
 			return;
 		}
 		case (SYMBOLMODE + 1): {
-				pval = score.val + score.defVal;
-			break;
+			return;
 		}
 		case SYMBOLMODE2: {
 			char ach = (char) convertCellToStr(val);
@@ -218,6 +236,15 @@ public:
 			return;
 		}
 		case (SYMBOLMODE2 + 1): {
+			pval = score.val + score.defVal;
+			break;
+		}
+		case SYMBOLMODE3: {
+			char ach = (char) convertCellToStr(val);
+			printf("%3c ", ach);
+			return;
+		}
+		case (SYMBOLMODE3 + 1): {
 			pval = score.val - score.defVal;
 			break;
 		}
@@ -277,7 +304,8 @@ public:
 	friend ostream & operator <<(ostream &output,
 			vector<scoreElement> &values) {
 		for (auto const& value : values) {
-			output << value << std::endl;
+			output << *value.cellPtr << value.val << "," << value.defVal
+					<< endl;
 		}
 		return output;
 
@@ -331,6 +359,19 @@ public:
 	tScore(scoreElement);
 };
 
+class hist {
+public:
+	cell *hArray[100];
+	int size;
+	int gameCh;
+	int locate(int row, int col) {
+		for (int i = 0; i < size; i++) {
+			if ((row == hArray[i]->rowVal) && (col == hArray[i]->colVal))
+				return (i);
+		}
+		return (-1);
+	}
+};
 class tsDebug {
 public:
 	tScore Array[40][40];
@@ -338,12 +379,13 @@ public:
 	int printCnt = 0;
 	int debugWidthAtDepth[MAXDEPTH];
 	int debugBreakAtDepth = -1; // not breaking
-								// indicating the depth to take a break if follow
-								// the path of debugWidthAtDepth array
+// indicating the depth to take a break if follow
+// the path of debugWidthAtDepth array
 
 	int bestWidthAtDepth[MAXDEPTH];
 	int lowDepth = 0;
 	tsDebug();
+
 	void print(int maxdepth, int widthAtDepth[], int bestWidthAtDepth[]) {
 		for (int d = maxdepth; d >= lowDepth; d--) {
 			cout << "Depth " << d << " Width=" << widthAtDepth[d] << " Best W:"
@@ -354,10 +396,6 @@ public:
 				cout << "\t<" << d << "," << w << ">";
 				cout << *Array[d][w].cellPtr;
 				cout << "=$" << Array[d][w] << ",ret" << Array[d][w].ts_ret;
-				/*
-				 printf("=$0x%x,ret$0x%x ", Array[d][w].val,
-				 Array[d][w].ts_ret  );
-				 */
 			}
 			cout << endl;
 		}
@@ -397,6 +435,16 @@ public:
 		}
 		out << endl;
 		return out;
+	}
+
+	void extractTohistArray(hist & histArray) {
+		int j = 0;
+		histArray.gameCh = top.val;
+		histArray.hArray[j++] = top.ptr;
+		for (int i = top.depth_id - 1; i >= 0; i--) {
+			histArray.hArray[j++] = array[i].ptr;
+		}
+		histArray.size = j;
 	}
 
 	breadCrumb & operator=(const breadCrumb & other) {
@@ -633,6 +681,23 @@ public:
 		cout << endl;
 	}
 
+	void print(hist &histArray) {
+		int val = histArray.gameCh;
+		for (int row = 0; row <= size; row++) {
+			for (int col = 0; col <= size; col++) {
+				int lh = histArray.locate(row, col);
+				val = oppositeVal(val);
+				board[row][col].print(val, lh);
+			}
+			cout << " ROW " << dec << row << endl;
+			cout << endl;
+		}
+		cout << "    ";
+		for (char pchar = 'A'; pchar <= 'P'; pchar++)
+			printf("%3C ", pchar);
+		cout << endl;
+	}
+
 	void print() {
 		cout << endl;
 		for (int row = 0; row <= size; row++) {
@@ -772,29 +837,54 @@ public:
 					break;
 			}
 		}
-
 	}
-	void printDebugInfo(int row, int col) {
-		cdebug.printTrace();
-		cout << " " << board[row][col] << endl;
-		printTrace();
-		cout << "LastCell =" << *lastCell << "T-" << hex << lastCellType;
 
-		cout << "-Last 2nd Cell =" << *last2Cell << "T2-" << hex
-				<< last2CellType << endl;
+	class traceCell {
+	public:
+		cell *cell;
+		traceCell *prev;
+	};
+	void printDebugInfo(int row, int col, traceCell * trace) {
+		printTrace();
+		do {
+			if (trace->cell)
+				cout << *(trace->cell) << "->";
+			trace = trace->prev;
+		} while (trace);
+		cout << endl;
 	}
 	void modifyDebugFeatures(int a);
 	void undo1move();
 	void redo1move();
-
+	cell * inputCell() {
+		int row, col;
+		char ccol, inputstr[20];
+		bool invalid = true;
+		do {
+			cout << "Enter cell:";
+			cin >> inputstr;
+			sscanf(inputstr, "%d%c", &row, &ccol);
+			col = ccol - 'a' + 1;
+			if (((row > 0) && (row < 16)) && ((col > 0) && (col < 16))) {
+				return (&board[row][col]);
+			}
+		} while (invalid);
+	}
 	void clearScore();
-	Line extractLine(int inVal, int dir, int x, int y,bool &ending,bool debugThis);
-	aScore score1Cell(int setVal, int row, int col, int depth,bool debugThis);
+	Line extractLine(int inVal, int dir, int x, int y, bool &ending,
+			bool debugThis);
+	aScore score1Cell(int setVal, int row, int col, int depth, bool debugThis);
 	scoreElement evalAllCell(int val, int width, int depth, int currentWidth,
 			bool maximizingPlayer, int alpha, int beta, breadCrumb &b,
-			bool debugThis, bool &redo);
+			bool debugThis, bool &redo, traceCell * trace);
 	scoreElement terminateScore;
 	cellDebug cdbg;
+	int nextWidth(int depth, int width) {
+		int nw = width - (width / (depth + 1));
+		if (nw <= 0)
+			nw = 1;
+		return (nw);
+	}
 	void reset();
 };
 

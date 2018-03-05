@@ -14,7 +14,7 @@ using namespace std;
 #include "caro.h"
 #define convertToRow(a) isalpha(a)? (islower(a)? (a-'a'+1):(a-'A'+1)):1
 #define isX(a) a=='X'?X_:O_
-#define notisX(a) a=='X'?O_:X_
+#define isNotX(a) a=='X'?O_:X_
 #define INF 999999999
 #define NINF -INF
 /*
@@ -162,7 +162,7 @@ int main() {
 			case 'X': // score 1 cell
 				debugScoringAll = 1;
 				cout << "Score ";
-				cout << agame.score1Cell(X_, row, col, 0,true);
+				cout << agame.score1Cell(X_, row, col, 0, true);
 				cout << " for X at row " << row;
 				cout << "col " << convertToChar(col) << endl;
 				agame.print(SCOREMODE);
@@ -185,11 +185,11 @@ int main() {
 				if (testType[1] == 'X')
 					result = agame.evalAllCell(X_, width, depth, 0,
 							!maximizingPlayer, NINF, INF, top_bc, false,
-							redonext); // width = dir; depth = row
+							redonext, nullptr); // width = dir; depth = row
 				else
 					result = agame.evalAllCell(O_, width, depth, 0,
 							!maximizingPlayer, NINF, INF, top_bc, false,
-							redonext);
+							redonext, nullptr);
 				printf("Score=%x, row=%d, col=%C", result.val,
 						(result.cellPtr)->rowVal,
 						(result.cellPtr)->colVal - 1 + 'A');
@@ -424,7 +424,7 @@ int main() {
 						}
 						agame.evalCnt = agame.myMoveAccScore =
 								agame.opnMoveAccScore = 0;
-						agame.myVal = notisX(gameCh);
+						agame.myVal = isNotX(gameCh);
 						int tw =
 								passNo > 0 ?
 										aDebug.debugWidthAtDepth[depth] : 0;
@@ -438,38 +438,67 @@ int main() {
 							do {
 								redonext = false;
 								agame.scorecnt = agame.skipcnt = 0;
-								result = agame.evalAllCell(notisX(gameCh),
+								result = agame.evalAllCell(isNotX(gameCh),
 										width, depth, tw, maximizingPlayer,
-										NINF, INF, top_bc, debugThis, redonext);
+										NINF, INF, top_bc, debugThis, redonext,
+										nullptr);
 							} while (redonext);
 
 						}
 						aDebug.enablePrinting = 0;
 
 						cout << top_bc << endl;
+						hist pArray;
+
+						top_bc.extractTohistArray(pArray);
+						cout << "_____________________________________________________________\n";
+						agame.print(pArray);
+
 						cout << "aDebug.debugWidthAtDepth " << endl;
+
 						for (int d = depth - 1; d >= 0; d--) {
 							aDebug.debugWidthAtDepth[d] =
 									top_bc.bestWidthAtDepth(d + 1); // from the higher best
 							agame.cdbg.add(top_bc.bestCellAtDepth(d + 1), d, 0);
 							cout << "  d=" << d << "w="
 									<< aDebug.debugWidthAtDepth[d];
+
 						}
 						//		agame.cdbg.add(top_bc.bestCellAtDepth(0), 0, 0);
 						cout << endl;
 					}
-					cout << "RESULT= " << *result.cellPtr << endl;
-					agame.setCell(notisX(gameCh), (result.cellPtr)->rowVal,
-							(result.cellPtr)->colVal, E_NEAR);
-					agame.print(SYMBOLMODE);
-					agame.print(SCOREMODE);
+					char ans;
+					cout
+							<< "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++";
+					cout << "\nRESULT= " << *result.cellPtr << endl;
+					cout << "set it ?";
+					cin >> ans;
+
+					cout
+							<< "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++";
+					if (ans == 'y') {
+						agame.setCell((int) (isNotX(gameCh)),
+								result.cellPtr->rowVal, result.cellPtr->colVal,
+								E_NEAR);
+
+					} else {
+						cout << "Enter row col val" << endl;
+						int row;
+						char ach, ccol;
+						//	agame.print(SYMBOLMODE);
+						agame.print(SCOREMODE);
+
+						cin >> row >> ccol >> ach;
+						int col = ccol - 'a' + 1;
+						cout << row << " " << ccol << " " << (int) (isX(ach))
+								<< endl;
+						agame.setCell((int) (isX(ach)), row, col, E_NEAR);
+					}
 
 					ahash.print();
 					if (twoPass) {
 						cout << "lowestD=" << aDebug.lowDepth << endl;
 						cout << top_bc << endl;
-						aDebug.print(depth, agame.widthAtDepth,
-								aDebug.debugWidthAtDepth);
 					}
 					agame.print(SYMBOLMODE);
 				}
