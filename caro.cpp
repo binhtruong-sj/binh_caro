@@ -25,8 +25,8 @@ using namespace std;
 //#define VERBOSE2 1
 #define VERBOSE0 1
 #define HASH 1
-#define MAGICNUMBER 0x1EADBEEF
-#define SIGNUM 0x1ABEBABE
+#define MAGICNUMBER 0x00BEEF00
+#define SIGNUM 0x00BABE00
 #define NUM9 NUM8*2
 #define NUM8 NUM7*2
 #define NUM7 NUM6*3
@@ -279,7 +279,7 @@ Line caro::extractLine(int currPlay, int dir, int row, int col, bool &ending,
 		prevVal = currCell->val == val;
 		if (currCell->val == val) {
 			continuous++;
-			if ((continuous >= 5) &&(val == currPlay))
+			if ((continuous >= 5) && (val == currPlay))
 				ending = true;
 			bitcnt++;
 			aline.val = aline.val | 0x1;
@@ -386,7 +386,9 @@ aScore caro::score1Cell(int currPlay, int row, int col, int depth,
 	aScore testSaveScore = { 0, 0, 0 };
 	if (board[row][col].val & E_CAL) {
 		skipcnt++;
-
+		// calculating overall score
+		previousMovePoints += board[row][col].score;
+		previousMovePoints.connectedOrCost = depth;
 		return board[row][col].score;
 
 		saveCheck = true;
@@ -464,10 +466,7 @@ aScore caro::score1Cell(int currPlay, int row, int col, int depth,
 			}
 			if (curVal == aiPlay)
 				rtn.connectedOrCost = -rtn.connectedOrCost; // neg for O_ -- cheezy
-			if (curVal == aiPlay)
-				myMoveAccScore += scores[j];
-			else
-				opnMoveAccScore += scores[j];
+
 			// doing this here intead of after for loop bc of how setcell works
 			board[row][col].val = saveVal;
 		}
@@ -505,6 +504,10 @@ aScore caro::score1Cell(int currPlay, int row, int col, int depth,
 		//cout << "rtnCnt=" << rtn.connected;
 
 	} while (redothisone);
+	// calculating overall score
+	previousMovePoints += rtn;
+	previousMovePoints.connectedOrCost = depth;
+
 	return rtn;
 }
 
@@ -627,7 +630,8 @@ scoreElement caro::evalAllCell(int currPlay, int width, int depth,
 		char ach;
 		cin >> ach;
 	}
-
+	// reset boardScore -- this is score for the previous move made
+	previousMovePoints = {0,0,0};
 	int highestConnected = 0;
 	for (int row = 1; row < size; row++) {
 		if (terminated)
@@ -676,22 +680,22 @@ scoreElement caro::evalAllCell(int currPlay, int width, int depth,
 		cin >> ach;
 	}
 
+
 	if (terminated) {
+		bestScore = termScore;
+		bestScore = previousMovePoints;
+
+		parent.top.ptr = bestScore.cellPtr;
+		parent.top.width_id = 0;
+		parent.top.depth_id = depth;
+		parent.top.val = currPlay;
 		if (debugScoring || debugThis) {
 			printDebugInfo(termScore.cellPtr->rowVal, termScore.cellPtr->colVal,
 					&currTrace);
 			printf("nextPlay=%c, aiPlay=%c ", convertToChar(currPlay),
 					convertToChar(aiPlay));
-			cout << " score=" << bestScore << "TERMINATED" << endl;
+			cout << " score=" << bestScore << " " << previousMovePoints << "TERMINATED" << endl;
 		}
-	}
-
-	if (terminated) {
-		bestScore = termScore;
-		parent.top.ptr = bestScore.cellPtr;
-		parent.top.width_id = 0;
-		parent.top.depth_id = depth;
-		parent.top.val = currPlay;
 		return (bestScore);
 	} else {
 // SORT picking the best move. NOT bestValue
@@ -702,7 +706,8 @@ scoreElement caro::evalAllCell(int currPlay, int width, int depth,
 			int size = 0;
 			for (int i = 0; i < (int) bestScoreArray.size(); i++) {
 				//	cout << *bestScoreArray[i].cellPtr << " cnnt=" << bestScoreArray[i].connected << endl;
-				if ((abs(bestScoreArray[i].connectedOrCost) >= abs(highestConnected))
+				if ((abs(bestScoreArray[i].connectedOrCost)
+						>= abs(highestConnected))
 						|| ((highestConnected == 3)
 								&& (bestScoreArray[i].connectedOrCost == -2))
 						|| ((highestConnected == -3)
@@ -710,7 +715,7 @@ scoreElement caro::evalAllCell(int currPlay, int width, int depth,
 					bestScoreArray[size++] = bestScoreArray[i];
 				}
 			}
-			if (debugThis || 1) {
+			if (debugThis ) {
 				printDebugInfo(0, 0, &currTrace);
 				cout << "Resize, originalWidth=" << widthAtDepth[depth]
 						<< " new=" << size;
@@ -804,7 +809,8 @@ scoreElement caro::evalAllCell(int currPlay, int width, int depth,
 
 // unless this is the last depth, playing the next hand (of the previous best fews)
 // Recursively call to evaluate that play. The next call is for the opponent hand.
-
+//	bestScore.connectedOrCost = depth;
+	bestScore = previousMovePoints;
 	if ((terminated == 0) && (depth > 0)) {
 		if (isMax)
 			bestScore = dworstValue();
@@ -933,7 +939,6 @@ scoreElement caro::evalAllCell(int currPlay, int width, int depth,
 			}
 
 		}
-
 	return bestScore;
 }
 

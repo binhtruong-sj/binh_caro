@@ -619,6 +619,7 @@ public:
 	int scorecnt, skipcnt;
 	int prevD;
 	int evalCnt = 0;
+	aScore previousMovePoints;
 	int myMoveAccScore = 0;
 	int opnMoveAccScore = 0;
 	int size = 17;
@@ -699,9 +700,8 @@ public:
 		for (char pchar = 'A'; pchar <= 'P'; pchar++)
 			printf("%3C ", pchar);
 		cout << endl;
-		printf("evalCnt=%d myScore=%d opnScore=%d delta=%d", evalCnt,
-				myMoveAccScore, opnMoveAccScore,
-				opnMoveAccScore - myMoveAccScore);
+
+		cout <<"EvalCnt=" << evalCnt << " BoardScore=" << previousMovePoints << endl;
 		cout << endl;
 	}
 
@@ -746,8 +746,6 @@ public:
 			}
 			if (near == E_NEAR) { // Only real set can be UNDO
 				evalCnt = 0;
-				myMoveAccScore = 0;
-				opnMoveAccScore = 0;
 				last2p = (last2p + 1) & 0xFF;
 				saveLast2p = last2p;
 				last2[last2p] = &board[row][col];

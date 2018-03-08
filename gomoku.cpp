@@ -424,8 +424,7 @@ int main() {
 								aDebug.debugWidthAtDepth[d] = -999;
 							}
 						}
-						agame.evalCnt = agame.myMoveAccScore =
-								agame.opnMoveAccScore = 0;
+						agame.evalCnt = 0;
 						agame.aiPlay = isNotX(gameCh);
 						int tw =
 								passNo > 0 ?
