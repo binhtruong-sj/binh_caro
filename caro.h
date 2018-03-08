@@ -22,6 +22,9 @@
 #define BOUNDARY 0xb // for boundary cells
 #define X_ 0x1    // occupied with X
 #define O_ 0x2    // occupied with O
+#define isX_(a) a==X_
+#define isO_(a) a==O_
+
 #define E_NEAR 0x10    // Empty cell, but close to other occupied cells
 #define E_TNEAR 0x20    // for temporary Near, clear after move is made
 #define E_CAL 0x100
@@ -33,10 +36,10 @@
 #define SEARCH_DISTANCE 7
 #define ReverseDirection(a) (a+4)%8
 //#define oppositeVal(a) a^0x3
-#define oppositeVal(a) a==X_?O_:X_
+#define oppositeVal(a) a^0x3
 #define myTurn(a) a%2
-//#define biasAdjust(favor_val, val,score,percent) (val == favor_val) ? ((score*percent)/100): score
 #define FLIP(a) ((a=a^1)? "ON":"OFF")
+#define percentAdjust(val,percent) (val*percent)/100
 
 #define MAXWIDTH 50
 #define CONTINUOUS_BIAS 1
@@ -72,6 +75,8 @@
  */
 using std::hex;
 using std::showbase;
+
+typedef int points;
 struct hEntry {
 public:
 	int line;
@@ -92,33 +97,39 @@ public:
 	void addEntry(int line, int connected, int cnt, int score);
 	void print();
 };
+
 class aScore {
 public:
-	int val, defVal;
+	points val, defVal;
+	int connectedOrCost;
 	bool operator ==(const aScore & v) {
 		bool out;
 		out = (v.val == val) && (v.defVal == defVal);
 		return out;
 	}
 	friend ostream & operator <<(ostream & out, const aScore & v) {
-		out << "(" << hex << v.val << "." << v.defVal << ")";
+		out << "(" << hex << v.val << "." << v.defVal << "," << dec
+				<< v.connectedOrCost << ")";
 		return out;
 	}
-	/*
-	 aScore & operator =(const aScore & v) {
-	 val = v.val;
-	 defVal = v.defVal;
-	 return *this;
-	 }
-	 */
+
+	aScore & operator =(const aScore & v) {
+		val = v.val;
+		defVal = v.defVal;
+		connectedOrCost = v.connectedOrCost;
+		return *this;
+	}
+
 	aScore & operator +=(const aScore & v) {
 		val = val + v.val;
 		defVal = defVal + v.defVal;
+		connectedOrCost = MAX(connectedOrCost, v.connectedOrCost);
 		return *this;
 	}
 	aScore & init(int v, int d) {
 		val = v;
 		defVal = d;
+		connectedOrCost = 0;
 		return *this;
 	}
 
@@ -139,6 +150,7 @@ public:
 				 // scan to maximum of 7 squares
 	int cnt = 0; // how many X_
 	int connected; // How long is the longest connected X_
+	int continuous;
 	int blocked; // is it blocked by O_ (next to an X_).
 	int offset; // to add or subtract to scoring
 	int type; // X_ or O_ are being search
@@ -146,7 +158,8 @@ public:
 		char binary[9];
 		toBinary(v.val, binary);
 		out << "Line=" << binary << " Cnt=" << v.cnt;
-		out << " Blocked=" << v.blocked << " Connected=" << v.connected;
+		out << " Blocked=" << v.blocked << " Connected=" << v.connected
+				<< " cont=" << v.continuous;
 		out << " Score = " << hex << v.score;
 		return out;
 	}
@@ -193,18 +206,12 @@ public:
 	}
 
 	void print(int v, int num) {
-		if (val & (X_ | O_)) {
+		if (num < 0) {
 			char ach = (char) convertCellToStr(val);
-			if (num < 0)
-				printf("%3c ", ach);
-			else
-				printf("%2d%c ", num, ach);
+			printf("%3c ", ach);
 		} else {
 			char ach = (char) convertCellToStr(v);
-			if (num < 0)
-				printf("%3c ", '-');
-			else
-				printf("%2d%c ", num, ach);
+			printf("%2d%c ", num, ach);
 		}
 		return;
 	}
@@ -248,7 +255,7 @@ public:
 			pval = score.val - score.defVal;
 			break;
 		}
-		case SCOREMODE: // myVal
+		case SCOREMODE: // aiPlay
 			pval = score.val;
 			break;
 		case SCOREMODE + 1: // opnVal or defVal
@@ -304,28 +311,33 @@ public:
 	friend ostream & operator <<(ostream &output,
 			vector<scoreElement> &values) {
 		for (auto const& value : values) {
-			output << *value.cellPtr << value.val << "," << value.defVal
-					<< endl;
+			output << *value.cellPtr << value.val << "," << value.defVal << ","
+					<< dec << value.connectedOrCost << endl;
 		}
 		return output;
 
 	}
 	friend ostream & operator <<(ostream &out, scoreElement &c) {
 		out << *c.cellPtr;
-		out << hex << (c.val) << "," << hex << (c.defVal) << " ";
+		out << hex << (c.val) << "," << hex << (c.defVal) << "," << dec
+				<< c.connectedOrCost << " ";
 		return out;
 	}
 	scoreElement & operator=(const scoreElement & other) {
 		val = other.val;
 		defVal = other.defVal;
+		connectedOrCost = other.connectedOrCost;
 		cellPtr = other.cellPtr;
 		return *this;
 	}
+
 	scoreElement & operator=(const aScore & other) {
 		val = other.val;
 		defVal = other.defVal;
+		connectedOrCost = other.connectedOrCost;
 		return *this;
 	}
+
 	scoreElement & operator=(cell & other) {
 		cellPtr = &other;
 		return *this;
@@ -335,19 +347,28 @@ public:
 		defVal = f.defVal;
 		return *this;
 	}
-	inline int bestMove() {
+	points bestMove() {
 		return val + defVal;
 	}
-	inline int bestValue() {
+	points bestValue() {
 		return val - defVal;
 	}
 	bool greaterMove(scoreElement &other) {
 		return (bestMove() > other.bestMove());
 	}
 	bool greaterValue(scoreElement &other) {
-		return (bestValue() > other.bestValue());
+		int betterValue = bestValue() > other.bestValue();
+		int betterOrEqualCost = connectedOrCost <= other.connectedOrCost;
+		if (betterOrEqualCost)
+			return (betterValue);
+		else {
+#define COSTADJUSTPERCENT 5 // 5 percent cost per level of depth, lose 50% value after 10 level
+			int deltaCost = connectedOrCost - other.connectedOrCost;
+			return (percentAdjust(bestValue(), COSTADJUSTPERCENT*deltaCost)
+					> other.bestValue());
+		}
 	}
-	int getScore(int setVal, int myval) { // returning setVal's score, need myVal for ref
+	int getScore(int setVal, int myval) { // returning setVal's score, need aiPlay for ref
 		return ((setVal == myval) ? val : defVal);
 	}
 };
@@ -442,7 +463,10 @@ public:
 		histArray.gameCh = top.val;
 		histArray.hArray[j++] = top.ptr;
 		for (int i = top.depth_id - 1; i >= 0; i--) {
-			histArray.hArray[j++] = array[i].ptr;
+			if (array[i].ptr)
+				histArray.hArray[j++] = array[i].ptr;
+			else
+				break;
 		}
 		histArray.size = j;
 	}
@@ -515,7 +539,7 @@ public:
  * size-2 is the size of the game; 0 and size-1 are used for boundary cells
  */
 class caroDebug {
-	vector<unsigned char> debugTrace, trace;
+	vector<char> debugTrace, trace;
 	int drow, dcol;
 	/*
 	 *
@@ -536,7 +560,7 @@ public:
 		debugTrace.clear();
 		while (char achar = *dstr++) {
 			if (achar != ',') {
-				debugTrace.push_back((unsigned int) (achar - '0'));
+				debugTrace.push_back((points) (achar - '0'));
 			}
 		}
 	}
@@ -570,7 +594,7 @@ public:
 		return false;
 	}
 	void tracePush(int i) {
-		trace.push_back((unsigned int) i);
+		trace.push_back((points) i);
 	}
 
 	void tracePop() {
@@ -586,7 +610,7 @@ public:
 	vector<unsigned char> trace;
 	void printTrace() {
 		cout << "\nTRACE: ";
-		for (unsigned int i = 0; i < trace.size(); i++)
+		for (unsigned i = 0; i < trace.size(); i++)
 			printf("%d,", trace[i]);
 	}
 	cell board[21][21];
@@ -599,9 +623,9 @@ public:
 	int opnMoveAccScore = 0;
 	int size = 17;
 	int widthAtDepth[40];
-
+	int maxDepth = 50;
 	int terminate;
-	int myVal = X_;
+	int aiPlay = X_;
 	cell * last2[256]; // fixed at 256, change to use remeainder if different setting
 	int last2v[256];
 	int last2p = 0;
@@ -682,12 +706,13 @@ public:
 	}
 
 	void print(hist &histArray) {
-		int val = histArray.gameCh;
+		int v = histArray.gameCh;
 		for (int row = 0; row <= size; row++) {
 			for (int col = 0; col <= size; col++) {
 				int lh = histArray.locate(row, col);
-				val = oppositeVal(val);
-				board[row][col].print(val, lh);
+				v = (lh % 2) ? oppositeVal(histArray.gameCh) : histArray.gameCh;
+				board[row][col].print(v, lh);
+
 			}
 			cout << " ROW " << dec << row << endl;
 			cout << endl;
@@ -843,8 +868,27 @@ public:
 	public:
 		cell *cell;
 		traceCell *prev;
+		void extractTohistArray(hist & histArray) {
+			int j = 0;
+			traceCell *next;
+			histArray.gameCh = cell->val;
+			histArray.hArray[j++] = cell;
+			next = prev;
+			while (1) {
+				if (next == nullptr)
+					break;
+				if (next->cell) {
+					histArray.hArray[j++] = next->cell;
+				} else
+					break;
+				next = next->prev;
+			}
+			histArray.size = j;
+		}
 	};
 	void printDebugInfo(int row, int col, traceCell * trace) {
+		cout << board[row][col];
+//		printf("Play:%C",convertToChar(currPlay));
 		printTrace();
 		do {
 			if (trace->cell)

@@ -78,7 +78,7 @@ int main() {
 	char name[4], testType[20];
 	FILE *finput;
 	Line tempLine;
-	unsigned int width = 5;
+	points width = 5;
 	int depth = 5;
 	extern int search_depth, search_width;
 	extern tsDebug aDebug;
@@ -87,6 +87,7 @@ int main() {
 	extern int interactiveDebug;
 	int twoPass = 0;
 	bool redonext = false;
+
 	bool maximizingPlayer = true;
 	extern hashTable ahash;
 	//agame.print();
@@ -407,8 +408,9 @@ int main() {
 						help();
 
 					col = name[0] - 'a' + 1;
-					agame.myVal = O_;
+					agame.aiPlay = O_;
 					scoreElement result;
+					agame.maxDepth = depth;
 					cell * aptr = agame.setCell(isX(gameCh), row, col, E_NEAR);
 					breadCrumb top_bc(depth); // at this level is depth+1
 					top_bc.top.ptr = aptr;
@@ -424,7 +426,7 @@ int main() {
 						}
 						agame.evalCnt = agame.myMoveAccScore =
 								agame.opnMoveAccScore = 0;
-						agame.myVal = isNotX(gameCh);
+						agame.aiPlay = isNotX(gameCh);
 						int tw =
 								passNo > 0 ?
 										aDebug.debugWidthAtDepth[depth] : 0;
