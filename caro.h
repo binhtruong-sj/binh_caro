@@ -31,8 +31,7 @@
 
 #define printInterval 100000
 #define MAXDEPTH 41
-#define InspectDistance 3
-#define saveRestoreDist InspectDistance+3
+
 #define SEARCH_DISTANCE 7
 #define ReverseDirection(a) (a+4)%8
 //#define oppositeVal(a) a^0x3
@@ -60,6 +59,10 @@
 								binary[8]= 0;}
 #define MIN(a,b) (a<b) ? a:b
 #define MAX(a,b) (a>b) ? a:b
+
+#define asMIN(a,b) (b.greaterValueThan(a)) ? a:b
+#define asMAX(a,b) (a.greaterValueThan(b)) ? a:b
+
 #define convertToChar(setVal) (setVal == X_ ? 'X' : 'O')
 #define convertToCol(col) ((char)(col-1+'a'))
 #define convertCellToStr(val) (char) ((val == X_) ? 'X' : \
@@ -85,6 +88,7 @@ public:
 	int score;
 	unsigned refcnt = 0;
 };
+
 class hashTable {
 public:
 	hEntry arrayE[1000];
@@ -97,49 +101,73 @@ public:
 	void addEntry(int line, int connected, int cnt, int score);
 	void print();
 };
+#define COSTADJUSTPERCENT 50 // 5 percent cost per level of depth, lose 50% value after 10 level
 
 class aScore {
 public:
-	points val, defVal;
-	int connectedOrCost;
+	points myScore = 0, oppScore = 0;
+	int connectedOrCost = 0;
 	bool operator ==(const aScore & v) {
 		bool out;
-		out = (v.val == val) && (v.defVal == defVal);
+		out = (v.myScore == myScore) && (v.oppScore == oppScore)
+				&& (v.connectedOrCost == connectedOrCost);
 		return out;
 	}
 	friend ostream & operator <<(ostream & out, const aScore & v) {
-		out << "(" << hex << v.val << "." << v.defVal << "," << dec
+		out << "(" << hex << v.myScore << "." << v.oppScore << "," << dec
 				<< v.connectedOrCost << ")";
 		return out;
 	}
 
 	aScore & operator =(const aScore & v) {
-		val = v.val;
-		defVal = v.defVal;
+		myScore = v.myScore;
+		oppScore = v.oppScore;
 		connectedOrCost = v.connectedOrCost;
 		return *this;
 	}
 
 	aScore & operator +=(const aScore & v) {
-		val = val + v.val;
-		defVal = defVal + v.defVal;
+		myScore = myScore + v.myScore;
+		oppScore = oppScore + v.oppScore;
 		connectedOrCost = MAX(connectedOrCost, v.connectedOrCost);
 		return *this;
 	}
 	aScore & init(int v, int d) {
-		val = v;
-		defVal = d;
+		myScore = v;
+		oppScore = d;
 		connectedOrCost = 0;
 		return *this;
 	}
 
-	int bMove() {
-		return val + defVal;
+	int bestMove() {
+		return myScore + oppScore;
 	}
-	int bValue() {
-		return val - defVal;
+	int bestValue() {
+		return myScore - oppScore;
 	}
-
+	bool greaterValueThan(aScore &other) {
+			bool result;
+			int deltaCost = other.connectedOrCost - connectedOrCost;
+			//	deltaCost  = 0;
+			//	cout <<hex <<this <<  "bv=" << bestValue() << " o.bv=" <<other <<" " << other.bestValue() << endl;
+			if (deltaCost == 0) {
+				result = (bestValue() > other.bestValue());
+			} else if (deltaCost > 0) {
+				int v = bestValue();
+				while (deltaCost-- > 0) {
+					v = (v * COSTADJUSTPERCENT) / 100;
+				}
+				result = (v > other.bestValue());
+			} else {
+				int v = other.bestValue();
+				while (deltaCost++ < 0) {
+					v = (v * COSTADJUSTPERCENT) / 100;
+				}
+				result = (bestValue() > v);
+			}
+			//cout << "result=" << result << endl;
+			return result;
+		}
 };
 class Line {
 public:
@@ -164,7 +192,7 @@ public:
 		return out;
 	}
 
-	int evaluate(bool ending);
+	int evaluate(bool ownPlay, bool ending);
 	void print() {
 		char binary[9];
 		toBinary(val, binary);
@@ -243,7 +271,7 @@ public:
 			return;
 		}
 		case (SYMBOLMODE2 + 1): {
-			pval = score.val + score.defVal;
+			pval = score.myScore + score.oppScore;
 			break;
 		}
 		case SYMBOLMODE3: {
@@ -252,20 +280,20 @@ public:
 			return;
 		}
 		case (SYMBOLMODE3 + 1): {
-			pval = score.val - score.defVal;
+			pval = score.myScore - score.oppScore;
 			break;
 		}
 		case SCOREMODE: // aiPlay
-			pval = score.val;
+			pval = score.myScore;
 			break;
 		case SCOREMODE + 1: // opnVal or defVal
-			pval = score.defVal;
+			pval = score.oppScore;
 			break;
 		case SCOREMODEm: // +
-			pval = score.val + score.defVal;
+			pval = score.myScore + score.oppScore;
 			break;
 		case SCOREMODEm + 1: // -
-			pval = score.val - score.defVal;
+			pval = score.myScore - score.oppScore;
 			break;
 		default:
 			break;
@@ -293,15 +321,14 @@ public:
 				<< convertToCol(c.colVal) << "]" << convertCellToStr(c.val);
 		return out;
 	}
+	cell & operator =(cell &c) {
+		score = c.score;
+		val = c.val;
+		return *this;
+	}
 
-	bool operator ==(cell &lookUpCell) {
-		/*
-		 printf("Comparing Cell ");
-		 lookUpCell.printid();
-		 cout << "===" ;
-		 printid();
-		 */
-		return ((lookUpCell.rowVal == rowVal) && (lookUpCell.colVal == colVal));
+	bool operator ==(cell &other) {
+		return ((other.score == score) && (other.val == val));
 	}
 };
 
@@ -311,29 +338,29 @@ public:
 	friend ostream & operator <<(ostream &output,
 			vector<scoreElement> &values) {
 		for (auto const& value : values) {
-			output << *value.cellPtr << value.val << "," << value.defVal << ","
-					<< dec << value.connectedOrCost << endl;
+			output << *value.cellPtr << value.myScore << "," << value.oppScore
+					<< "," << dec << value.connectedOrCost << endl;
 		}
 		return output;
 
 	}
 	friend ostream & operator <<(ostream &out, scoreElement &c) {
 		out << *c.cellPtr;
-		out << hex << (c.val) << "," << hex << (c.defVal) << "," << dec
+		out << hex << (c.myScore) << "," << hex << (c.oppScore) << "," << dec
 				<< c.connectedOrCost << " ";
 		return out;
 	}
 	scoreElement & operator=(const scoreElement & other) {
-		val = other.val;
-		defVal = other.defVal;
+		myScore = other.myScore;
+		oppScore = other.oppScore;
 		connectedOrCost = other.connectedOrCost;
 		cellPtr = other.cellPtr;
 		return *this;
 	}
 
 	scoreElement & operator=(const aScore & other) {
-		val = other.val;
-		defVal = other.defVal;
+		myScore = other.myScore;
+		oppScore = other.oppScore;
 		connectedOrCost = other.connectedOrCost;
 		return *this;
 	}
@@ -343,33 +370,21 @@ public:
 		return *this;
 	}
 	scoreElement & score(scoreElement& f) {
-		val = f.val;
-		defVal = f.defVal;
+		myScore = f.myScore;
+		oppScore = f.oppScore;
 		return *this;
 	}
 	points bestMove() {
-		return val + defVal;
+		return myScore + oppScore;
 	}
 	points bestValue() {
-		return val - defVal;
+		return myScore - oppScore;
 	}
 	bool greaterMove(scoreElement &other) {
 		return (bestMove() > other.bestMove());
 	}
-	bool greaterValue(scoreElement &other) {
-		int betterValue = bestValue() > other.bestValue();
-		int betterOrEqualCost = connectedOrCost <= other.connectedOrCost;
-		if (betterOrEqualCost)
-			return (betterValue);
-		else {
-#define COSTADJUSTPERCENT 5 // 5 percent cost per level of depth, lose 50% value after 10 level
-			int deltaCost = connectedOrCost - other.connectedOrCost;
-			return (percentAdjust(bestValue(), COSTADJUSTPERCENT*deltaCost)
-					> other.bestValue());
-		}
-	}
 	int getScore(int setVal, int myval) { // returning setVal's score, need aiPlay for ref
-		return ((setVal == myval) ? val : defVal);
+		return ((setVal == myval) ? myScore : oppScore);
 	}
 };
 
@@ -546,10 +561,11 @@ class caroDebug {
 	 */
 public:
 
-	void printTrace() {
+	int printTrace() {
 		cout << "\nTRACE: ";
 		for (unsigned int i = 0; i < trace.size(); i++)
-			printf("%d,", trace[i]);
+			printf("%02d,", trace[i]);
+		return (trace.size());
 	}
 	/*
 	 *
@@ -603,16 +619,130 @@ public:
 
 }
 ;
+class debugid {
+public:
+	vector <int> id;
+	bool find (int i) {
+		bool debugNext = false;
+		for(unsigned int ii = 0; ii < id.size(); ii++) {
+			if((debugNext = (id[ii] == i))) {
+				break;
+			}
+		}
+		return debugNext;
+	}
+};
 
+class tracer {
+public:
+	tracer *prev = nullptr, *next = nullptr;
+	scoreElement savePoint;
+	int atDepth;
+
+	tracer() {
+		savePoint.cellPtr = nullptr;
+	}
+	tracer(cell *incptr) {
+		savePoint.cellPtr = incptr;
+	}
+	~tracer() {
+		// tracer is a link list. When delete, need to check if it point to a link list
+		// if so, need to delete the entire link list
+		tracer *tptr, *toDel;
+		tptr = next;
+		toDel = tptr;
+		if (tptr) {
+			tptr = tptr->next;
+			delete toDel;
+			toDel = tptr;
+		}
+	}
+	friend ostream & operator <<(ostream & out, tracer & v) {
+		tracer *tv = &v;
+		cout << "TrC: ";
+		do {
+			cout << tv->atDepth << tv->savePoint << "->";
+		} while ((tv = tv->next));
+		cout << endl;
+		tv = &v;
+		while ((tv = tv->prev)) {
+			cout << tv->atDepth << tv->savePoint << "<-";
+		}
+		return out;
+	}
+	void extractTohistArray(int val, hist & histArray) {
+		int j = 0;
+		tracer *tracerPtr;
+		histArray.gameCh = val;
+		histArray.hArray[j++] = savePoint.cellPtr;
+		tracerPtr = next;
+		while (1) {
+			if (tracerPtr == nullptr)
+				break;
+			if (tracerPtr->savePoint.cellPtr) {
+				histArray.hArray[j++] = tracerPtr->savePoint.cellPtr;
+			} else
+				break;
+			tracerPtr = tracerPtr->next;
+		}
+		histArray.size = j;
+	}
+};
+class getInputStr {
+	char inputstr[80];
+	char *ptr = inputstr;
+public:
+	getInputStr() {
+		clear();
+	}
+	void clear() {
+		ptr = inputstr;
+		inputstr[0] = 0;
+	}
+
+	int mygetstr(char *returnStr) {
+		do {
+			cout << "STRANGE-" << strlen(ptr) ;
+			printf("%s-\n",ptr);
+			int i = 0;
+			if (*ptr) {
+				if (!(isalpha(*ptr))) {
+					while (isdigit(*ptr) || (*ptr == '-') || (*ptr == ',')) {
+						if (*ptr == ',') {
+							ptr++;
+							break;
+						}
+						returnStr[i++] = *ptr++;
+					}
+					returnStr[i] = 0;
+				} else {
+					while ((isalpha(*ptr))) {
+						returnStr[i++] = *ptr++;
+					}
+					returnStr[i] = 0;
+				}
+				return (strlen(ptr));
+			} else {
+				cout << "getting input" << endl;
+				cin.clear();
+				cin.ignore(numeric_limits < streamsize > ::max(), '\n');
+				cin >> inputstr;
+				ptr = inputstr;
+			}
+		} while (1);
+	}
+};
 class caro {
 public:
 	caroDebug cdebug;
 	vector<unsigned char> trace;
-	void printTrace() {
+	int printTrace() {
 		cout << "\nTRACE: ";
 		for (unsigned i = 0; i < trace.size(); i++)
-			printf("%d,", trace[i]);
+			printf("%02de", trace[i]);
+		return trace.size();
 	}
+
 	cell board[21][21];
 	cell *lastCell, *last2Cell;
 	int lastCellType, last2CellType;
@@ -626,7 +756,7 @@ public:
 	int widthAtDepth[40];
 	int maxDepth = 50;
 	int terminate;
-	int aiPlay = X_;
+	int my_AI_Play = X_;
 	cell * last2[256]; // fixed at 256, change to use remeainder if different setting
 	int last2v[256];
 	int last2p = 0;
@@ -664,7 +794,9 @@ public:
 		}
 	}
 	;
-
+	bool isMyPlay(int play) {
+		return (play & my_AI_Play);
+	}
 	virtual ~caro();
 	friend ostream & operator <<(ostream &out, const caro &c) {
 		out << endl;
@@ -679,6 +811,35 @@ public:
 			out << " " << pchar;
 		out << endl;
 		return out;
+	}
+
+	void save(caro & other) {
+		for (int row = 0; row <= size; row++) {
+			for (int col = 0; col <= size; col++) {
+				other.board[row][col] = board[row][col];
+			}
+		}
+	}
+
+	bool compare(caro & other) {
+		bool result;
+		for (int row = 0; row <= size; row++) {
+			for (int col = 0; col <= size; col++) {
+				if (!(result = (other.board[row][col].score
+						== board[row][col].score))) {
+					cout << "new";
+					print(SYMBOLMODE2);
+					cout << "backup";
+					other.print(SYMBOLMODE2);
+					cout << "FAILED  at row=" << row << " col=" << col << endl;
+					cout << board[row][col] << board[row][col].score << " <> "
+							<< other.board[row][col]
+							<< other.board[row][col].score;
+					return (false);
+				}
+			}
+		}
+		return true;
 	}
 
 	void print(int mode) {
@@ -701,7 +862,8 @@ public:
 			printf("%3C ", pchar);
 		cout << endl;
 
-		cout <<"EvalCnt=" << evalCnt << " BoardScore=" << previousMovePoints << endl;
+		cout << "EvalCnt=" << evalCnt << " BoardScore=" << previousMovePoints
+				<< endl;
 		cout << endl;
 	}
 
@@ -736,6 +898,8 @@ public:
 		cout << endl;
 	}
 	unsigned setCellCnt = 0;
+#define InspectDistance 4
+#define saveRestoreDist InspectDistance+8 //  ---X---
 	/*
 	 * set a cell to X or O
 	 */
@@ -762,31 +926,6 @@ public:
 			}
 		}
 		return &board[row][col];
-
-	}
-
-	/*
-	 * Temporary near marking set when traverse further ahead
-	 */
-	void setNEAR(int row, int col, int near) {
-		cell *currCell;
-		int rval;
-		for (int dir = East; dir <= SEast; dir++) {
-			currCell = &board[row][col];
-			for (int i = 0; i < InspectDistance; i++) {
-				do {
-					currCell = currCell->near_ptr[dir];
-					rval = currCell->val & (X_ | O_);
-					if (rval)
-						i = 0;
-				} while ((rval != 3) && rval);
-				currCell->val = currCell->val & ~(E_CAL);
-				if ((currCell->val & (O_ | X_ | E_NEAR)) == 0)
-					currCell->val = near;
-				if (rval == 3) // boundary
-					break;
-			}
-		}
 	}
 
 	/*
@@ -805,20 +944,58 @@ public:
 						i = 0;
 
 				} while ((rval != 3) && rval);
+				//			cout <<"N-" << *currCell << hex << currCell->val;
+				currCell->val = currCell->val & ~(E_CAL);
 				if (currCell->val & (E_TNEAR)) {
-					currCell->val = currCell->val & ~(E_CAL);
-					currCell->score= {0,0};
+//					currCell->score= {0,0};
 					currCell->val = E_FAR; // only clear the cell with E_TNEAR (temporary NEAR) to FAR
-				} else if (currCell->val & (E_NEAR)) {
-					currCell->val = currCell->val & ~(E_CAL);
-					currCell->score= {0,0};
+//				} else if (currCell->val & (E_NEAR)) {
+//					currCell->score= {0,0};
 				} else if (rval == 3) // boundary
-				break;
+					break;
+
+				//			cout <<"-"<< currCell->val;
+
 			}
 		}
 		board[row][col].val = saveVal & ~(E_CAL); // Return the val to prev
 		return currCell;
 	}
+
+	void reCalBoard(int currVal, int depth) {
+		for (int row = 1; row < size; row++)
+			for (int col = 1; col < size; col++) {
+				if ((board[row][col].val & (O_ | X_)) == 0)
+					score1Cell(currVal, row, col, depth, false);
+			}
+	}
+
+	/*
+	 * Temporary near marking set when traverse further ahead
+	 */
+	void setNEAR(int row, int col, int near) {
+		cell *currCell;
+		int rval;
+		for (int dir = East; dir <= SEast; dir++) {
+			currCell = &board[row][col];
+			for (int i = 0; i < InspectDistance; i++) {
+				do {
+					currCell = currCell->near_ptr[dir];
+					rval = currCell->val & (X_ | O_);
+					if (rval)
+						i = 0;
+				} while ((rval != 3) && rval);
+				currCell->val = currCell->val & ~(E_CAL);
+				if (currCell->val == 0)
+					currCell->val = near;
+				if (rval == 3) // boundary
+					break;
+			}
+		}
+	}
+	/*
+	 *
+	 */
 	void saveScoreVal(int row, int col,
 			aScore saveScoreArray[8][saveRestoreDist], aScore & s1Score,
 			int saveValArray[8][saveRestoreDist], int & s1Val) {
@@ -828,13 +1005,16 @@ public:
 		s1Val = board[row][col].val;
 		for (int dir = East; dir <= SEast; dir++) {
 			currCell = &board[row][col];
-			for (int i = 0; i < saveRestoreDist; i++) {
+			int j = 0;
+			for (int i = 0; i < InspectDistance; i++) {
 				do {
 					currCell = currCell->near_ptr[dir];
 					rval = currCell->val & (X_ | O_);
+					if (rval)
+						i = 0;
 				} while ((rval != 3) && rval);
-				saveScoreArray[dir][i] = currCell->score;
-				saveValArray[dir][i] = currCell->val;
+				saveScoreArray[dir][j] = currCell->score;
+				saveValArray[dir][j++] = currCell->val;
 				if (rval == 3) // boundary
 					break;
 			}
@@ -849,13 +1029,16 @@ public:
 		board[row][col].val = s1Val;
 		for (int dir = East; dir <= SEast; dir++) {
 			currCell = &board[row][col];
-			for (int i = 0; i < saveRestoreDist; i++) {
+			int j = 0;
+			for (int i = 0; i < InspectDistance; i++) {
 				do {
 					currCell = currCell->near_ptr[dir];
 					rval = currCell->val & (X_ | O_);
+					if (rval)
+						i = 0;
 				} while ((rval != 3) && rval);
-				currCell->score = saveScoreArray[dir][i];
-				currCell->val = saveValArray[dir][i];
+				currCell->score = saveScoreArray[dir][j];
+				currCell->val = saveValArray[dir][j++];
 				if (rval == 3) // boundary
 					break;
 			}
@@ -868,29 +1051,31 @@ public:
 		traceCell *prev;
 		void extractTohistArray(hist & histArray) {
 			int j = 0;
-			traceCell *next;
+			traceCell *ptr;
 			histArray.gameCh = cell->val;
 			histArray.hArray[j++] = cell;
-			next = prev;
+			ptr = prev;
 			while (1) {
-				if (next == nullptr)
+				if (ptr == nullptr)
 					break;
-				if (next->cell) {
-					histArray.hArray[j++] = next->cell;
+				if (ptr->cell) {
+					histArray.hArray[j++] = ptr->cell;
 				} else
 					break;
-				next = next->prev;
+				ptr = ptr->prev;
 			}
 			histArray.size = j;
 		}
 	};
-	void printDebugInfo(int row, int col, traceCell * trace) {
+
+	void printDebugInfo(int row, int col, traceCell * trace, int depth) {
 		cout << board[row][col];
 //		printf("Play:%C",convertToChar(currPlay));
 		printTrace();
+		int i = depth;
 		do {
 			if (trace->cell)
-				cout << *(trace->cell) << "->";
+				cout << i++ << *(trace->cell) << "->";
 			trace = trace->prev;
 		} while (trace);
 		cout << endl;
@@ -917,8 +1102,8 @@ public:
 			bool debugThis);
 	aScore score1Cell(int setVal, int row, int col, int depth, bool debugThis);
 	scoreElement evalAllCell(int val, int width, int depth, int currentWidth,
-			bool maximizingPlayer, int alpha, int beta, breadCrumb &b,
-			bool debugThis, bool &redo, traceCell * trace);
+			bool maximizingPlayer, aScore alpha, aScore beta, breadCrumb &b,
+			bool debugThis, bool &redo, traceCell * trace, tracer *headTracer);
 	scoreElement terminateScore;
 	cellDebug cdbg;
 	int nextWidth(int depth, int width) {
@@ -928,6 +1113,7 @@ public:
 		return (nw);
 	}
 	void reset();
-};
+}
+;
 
 #endif /* CARO_H_ */

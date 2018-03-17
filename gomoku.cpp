@@ -15,8 +15,8 @@ using namespace std;
 #define convertToRow(a) isalpha(a)? (islower(a)? (a-'a'+1):(a-'A'+1)):1
 #define isX(a) a=='X'?X_:O_
 #define isNotX(a) a=='X'?O_:X_
-#define INF 999999999
-#define NINF -INF
+#define INF {0x0FFFFFFF,0,depth}
+#define NINF {0,0x0FFFFFFF,depth}
 /*
  * For the purpose of testing the code.  This is a textfile setting the game up
  * after setting,
@@ -83,13 +83,18 @@ int main() {
 	extern int search_depth, search_width;
 	extern tsDebug aDebug;
 	extern int debugScoring, debugScoringd, debugScoringAll, debugBestPath,
-			debugAllPaths, debugAI, debugAIbest, debugHash;
+			debugAllPaths, debugAI, debugAIbest, debugHash,docheck;
 	extern int interactiveDebug;
 	int twoPass = 0;
 	bool redonext = false;
 
 	bool maximizingPlayer = true;
 	extern hashTable ahash;
+	tracer aTracer;
+	aTracer.prev = nullptr;
+	aTracer.savePoint.cellPtr = &agame.board[1][1];
+	aTracer.savePoint = {0,0,0};
+
 	//agame.print();
 #if 1
 	cout << "Enter Width Depth " << endl;
@@ -155,7 +160,7 @@ int main() {
 			case 's': {
 				Line tempLine = agame.extractLine(X_, dir, row, col, ending,
 						true);
-				tempLine.evaluate(ending);
+				tempLine.evaluate(true,ending);
 				tempLine.print();
 			}
 				break;
@@ -186,12 +191,12 @@ int main() {
 				if (testType[1] == 'X')
 					result = agame.evalAllCell(X_, width, depth, 0,
 							!maximizingPlayer, NINF, INF, top_bc, false,
-							redonext, nullptr); // width = dir; depth = row
+							redonext, nullptr, &aTracer); // width = dir; depth = row
 				else
 					result = agame.evalAllCell(O_, width, depth, 0,
 							!maximizingPlayer, NINF, INF, top_bc, false,
-							redonext, nullptr);
-				printf("Score=%x, row=%d, col=%C", result.val,
+							redonext, nullptr, &aTracer);
+				printf("Score=%x, row=%d, col=%C", result.myScore,
 						(result.cellPtr)->rowVal,
 						(result.cellPtr)->colVal - 1 + 'A');
 				agame.print(SYMBOLMODE);
@@ -222,7 +227,7 @@ int main() {
 								<< "-5 debugBestPath -6 debugAllPaths, -7 debugAI, "
 								<< "-10 TRACE-debug -11 cells , "
 								<< "-12 reset debug, -13 save -23 debugScoringd -24 debugScoringAll"
-								<< " -25 debugHash -99 interactiveDebug "
+								<< " -25 debugHash -98 docheck -99 interactiveDebug "
 								<< " enter ? on col for details" << endl;
 
 						cin >> row;
@@ -321,6 +326,8 @@ int main() {
 										<< " debugScoring" << endl;
 
 								break;
+							case -98:
+								cout << "Turn " << FLIP(docheck) << " docheck" << endl;
 							case -99:
 								cout << "Turn " << FLIP(interactiveDebug)
 										<< " interactiveDebug" << endl;
@@ -408,7 +415,7 @@ int main() {
 						help();
 
 					col = name[0] - 'a' + 1;
-					agame.aiPlay = O_;
+					agame.my_AI_Play = O_;
 					scoreElement result;
 					agame.maxDepth = depth;
 					cell * aptr = agame.setCell(isX(gameCh), row, col, E_NEAR);
@@ -425,7 +432,7 @@ int main() {
 							}
 						}
 						agame.evalCnt = 0;
-						agame.aiPlay = isNotX(gameCh);
+						agame.my_AI_Play = isNotX(gameCh);
 						int tw =
 								passNo > 0 ?
 										aDebug.debugWidthAtDepth[depth] : 0;
@@ -442,8 +449,11 @@ int main() {
 								result = agame.evalAllCell(isNotX(gameCh),
 										width, depth, tw, maximizingPlayer,
 										NINF, INF, top_bc, debugThis, redonext,
-										nullptr);
+										nullptr, &aTracer);
+								if (redonext)
+									delete aTracer.next;
 							} while (redonext);
+							delete aTracer.next;
 
 						}
 						aDebug.enablePrinting = 0;
@@ -452,7 +462,8 @@ int main() {
 						hist pArray;
 
 						top_bc.extractTohistArray(pArray);
-						cout << "_____________________________________________________________\n";
+						cout
+								<< "_____________________________________________________________\n";
 						agame.print(pArray);
 
 						cout << "aDebug.debugWidthAtDepth " << endl;
