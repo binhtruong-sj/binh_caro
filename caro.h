@@ -28,6 +28,7 @@
 #define E_NEAR 0x10    // Empty cell, but close to other occupied cells
 #define E_TNEAR 0x20    // for temporary Near, clear after move is made
 #define E_CAL 0x100
+#define E_LAST 0x8000
 
 #define printInterval 100000
 #define MAXDEPTH 41
@@ -50,6 +51,7 @@
 #define SCOREMODE 6
 
 #define SCOREMODEm 8
+#define POSSMOVEMODE 10
 
 #define toBinary(v,bianry) {int vvall = v;\
 								for(int bit=7; bit>=0; bit--) {\
@@ -59,6 +61,8 @@
 								binary[8]= 0;}
 #define MIN(a,b) (a<b) ? a:b
 #define MAX(a,b) (a>b) ? a:b
+#define mapping(row) 16-row
+#define reverseMapping(row) 16-row
 
 #define asMIN(a,b) (b.greaterValueThan(a)) ? a:b
 #define asMAX(a,b) (a.greaterValueThan(b)) ? a:b
@@ -69,9 +73,9 @@
                               (val == O_) ? 'O' :\
 		                   (val == E_FAR) ? '.' :\
 		                     (val == 0xb) ? 'b' :\
-		                     ( val & E_CAL)? '=':\
+		                     ( val & E_CAL)? ',':\
                           (val & E_TNEAR) ? '+' :\
-                                              '*')
+                                              '`')
 
 /*
  * Line for the purpose of scoring
@@ -146,28 +150,28 @@ public:
 		return myScore - oppScore;
 	}
 	bool greaterValueThan(aScore &other) {
-			bool result;
-			int deltaCost = other.connectedOrCost - connectedOrCost;
-			//	deltaCost  = 0;
-			//	cout <<hex <<this <<  "bv=" << bestValue() << " o.bv=" <<other <<" " << other.bestValue() << endl;
-			if (deltaCost == 0) {
-				result = (bestValue() > other.bestValue());
-			} else if (deltaCost > 0) {
-				int v = bestValue();
-				while (deltaCost-- > 0) {
-					v = (v * COSTADJUSTPERCENT) / 100;
-				}
-				result = (v > other.bestValue());
-			} else {
-				int v = other.bestValue();
-				while (deltaCost++ < 0) {
-					v = (v * COSTADJUSTPERCENT) / 100;
-				}
-				result = (bestValue() > v);
+		bool result;
+		int deltaCost = other.connectedOrCost - connectedOrCost;
+		//	deltaCost  = 0;
+		//	cout <<hex <<this <<  "bv=" << bestValue() << " o.bv=" <<other <<" " << other.bestValue() << endl;
+		if (deltaCost == 0) {
+			result = (bestValue() > other.bestValue());
+		} else if (deltaCost > 0) {
+			int v = bestValue();
+			while (deltaCost-- > 0) {
+				v = (v * COSTADJUSTPERCENT) / 100;
 			}
-			//cout << "result=" << result << endl;
-			return result;
+			result = (v > other.bestValue());
+		} else {
+			int v = other.bestValue();
+			while (deltaCost++ < 0) {
+				v = (v * COSTADJUSTPERCENT) / 100;
+			}
+			result = (bestValue() > v);
 		}
+		//cout << "result=" << result << endl;
+		return result;
+	}
 };
 class Line {
 public:
@@ -245,11 +249,14 @@ public:
 	}
 
 	void print(int mode) {
-		int pval;
-		if (val & (X_ | O_)) {
+		int pval = val & 0xFFF;
+		if (pval & (X_ | O_)) {
 			if ((mode % 2) == 0) {
-				char ach = (char) convertCellToStr(val);
-				printf("%3c ", ach);
+				char ach = (char) convertCellToStr(pval);
+				if (val & E_LAST)
+					printf(" <%c>", ach);
+				else
+					printf("%3c ", ach);
 			} else {
 				printf("%3c ", ' ');
 			}
@@ -295,6 +302,14 @@ public:
 		case SCOREMODEm + 1: // -
 			pval = score.myScore - score.oppScore;
 			break;
+		case POSSMOVEMODE: {
+			char ach = (char) convertCellToStr(val);
+			printf("%3c ", ach);
+			return;
+		}
+		case (POSSMOVEMODE + 1): {
+			return;
+		}
 		default:
 			break;
 		}
@@ -313,12 +328,13 @@ public:
 	}
 
 	void printid() {
-		printf("[%d%c]", rowVal, convertToCol(colVal));
+		printf("[%d%c]", mapping(rowVal), convertToCol(colVal));
 	}
 
 	friend ostream & operator <<(ostream &out, cell &c) {
-		out << "[" << dec << c.rowVal
-				<< convertToCol(c.colVal) << "]" << convertCellToStr(c.val);
+		out << "[" << dec
+				<< mapping(
+						c.rowVal) << convertToCol(c.colVal) << "]" << convertCellToStr(c.val);
 		return out;
 	}
 	cell & operator =(cell &c) {
@@ -621,11 +637,11 @@ public:
 ;
 class debugid {
 public:
-	vector <int> id;
-	bool find (int i) {
+	vector<int> id;
+	bool find(int i) {
 		bool debugNext = false;
-		for(unsigned int ii = 0; ii < id.size(); ii++) {
-			if((debugNext = (id[ii] == i))) {
+		for (unsigned int ii = 0; ii < id.size(); ii++) {
+			if ((debugNext = (id[ii] == i))) {
 				break;
 			}
 		}
@@ -702,8 +718,8 @@ public:
 
 	int mygetstr(char *returnStr) {
 		do {
-			cout << "STRANGE-" << strlen(ptr) ;
-			printf("%s-\n",ptr);
+			cout << "STRANGE-" << strlen(ptr);
+			printf("%s-\n", ptr);
 			int i = 0;
 			if (*ptr) {
 				if (!(isalpha(*ptr))) {
@@ -744,30 +760,28 @@ public:
 	}
 
 	cell board[21][21];
-	cell *lastCell, *last2Cell;
-	int lastCellType, last2CellType;
-	int scorecnt, skipcnt;
+	int scorecnt = 0, skipcnt = 0;
 	int prevD;
 	int evalCnt = 0;
 	aScore previousMovePoints;
 	int myMoveAccScore = 0;
 	int opnMoveAccScore = 0;
 	int size = 17;
-	int widthAtDepth[40];
 	int maxDepth = 50;
 	int terminate;
 	int my_AI_Play = X_;
-	cell * last2[256]; // fixed at 256, change to use remeainder if different setting
-	int last2v[256];
-	int last2p = 0;
+	cell * movesHist[256]; // fixed at 256, change to use remeainder if different setting
+	int movesHistVal[256];
+	int lastMoveIndex = 0;
 	int saveLast2p;
 	int moveCnt = 0;
+	int rsum_chk_max = 0;
+	int rsum_chk_min = 0;
+	cell* possMove[40];
 	caro(int table_size) {
 		size = table_size + 1;
 		// Setup pointer to ajacent cells, only from 1 to size-1
 		terminate = 0;
-		for (int w = 0; w < 40; w++)
-			widthAtDepth[w] = 0;
 
 		for (int row = 0; row <= size; row++) {
 			for (int col = 0; col <= size; col++) {
@@ -845,12 +859,21 @@ public:
 	void print(int mode) {
 		cout << "MODE=" << mode << " skipcnt=" << skipcnt << " scorecnt="
 				<< scorecnt << endl;
+		int lastMoveIndex1 = lastMoveIndex - 1;
 
 		for (int row = 0; row <= size; row++) {
 			for (int col = 0; col <= size; col++) {
+				if (movesHist[lastMoveIndex] == &board[row][col])
+					board[row][col].val ^= E_LAST;
+				if (movesHist[lastMoveIndex1] == &board[row][col])
+					board[row][col].val ^= E_LAST;
 				board[row][col].print(mode);
+				if (movesHist[lastMoveIndex] == &board[row][col])
+					board[row][col].val ^= E_LAST;
+				if (movesHist[lastMoveIndex1] == &board[row][col])
+					board[row][col].val ^= E_LAST;
 			}
-			cout << " ROW " << dec << row << endl;
+			cout << " ROW " << dec << mapping(row) << endl;
 			for (int col = 0; col <= size; col++) {
 				board[row][col].print(mode + 1);
 			}
@@ -874,9 +897,45 @@ public:
 				int lh = histArray.locate(row, col);
 				v = (lh % 2) ? oppositeVal(histArray.gameCh) : histArray.gameCh;
 				board[row][col].print(v, lh);
+			}
+			cout << " ROW " << dec << mapping(row) << endl;
+			cout << endl;
+		}
+		cout << "    ";
+		for (char pchar = 'A'; pchar <= 'P'; pchar++)
+			printf("%3C ", pchar);
+		cout << endl;
+	}
+
+	void print(cell* possMove[]) {
+		int lastMoveIndex1 = lastMoveIndex - 1;
+		for (int row = 0; row <= size; row++) {
+			for (int col = 0; col <= size; col++) {
+				if (movesHist[lastMoveIndex] == &board[row][col])
+					board[row][col].val ^= E_LAST;
+				if (movesHist[lastMoveIndex1] == &board[row][col])
+					board[row][col].val ^= E_LAST;
+				int i;
+				for (i = 0; i < 40; i++) {
+					if (possMove[i] == nullptr) {
+						i = 41;
+						break;
+					} else if (possMove[i] == &board[row][col]) {
+						break;
+					}
+				}
+				if (i >= 40)
+					board[row][col].print(SYMBOLMODE);
+				else
+					printf("%3d ", i+1);
+
+				if (movesHist[lastMoveIndex] == &board[row][col])
+					board[row][col].val ^= E_LAST;
+				if (movesHist[lastMoveIndex1] == &board[row][col])
+					board[row][col].val ^= E_LAST;
 
 			}
-			cout << " ROW " << dec << row << endl;
+			cout << " ROW " << dec << mapping(row) << endl;
 			cout << endl;
 		}
 		cout << "    ";
@@ -891,7 +950,7 @@ public:
 			for (int col = 0; col <= size; col++) {
 				board[row][col].print(0);
 			}
-			cout << " ROW " << row << endl;
+			cout << " ROW " << mapping(row) << endl;
 		}
 		for (char pchar = 'A'; pchar <= 'P'; pchar++)
 			printf("%2C ", pchar);
@@ -910,18 +969,16 @@ public:
 			}
 			if (near == E_NEAR) { // Only real set can be UNDO
 				evalCnt = 0;
-				last2p = (last2p + 1) & 0xFF;
-				saveLast2p = last2p;
-				last2[last2p] = &board[row][col];
-				last2v[last2p] = board[row][col].val;
+				// code to handle undo
+				moveCnt++;
+				lastMoveIndex = (lastMoveIndex + 1) & 0xFF; // wrap around -- circular
+				saveLast2p = lastMoveIndex;
+				movesHist[lastMoveIndex] = &board[row][col];
+				movesHistVal[lastMoveIndex] = board[row][col].val;
 			}
 			board[row][col].val = setVal;
 			board[row][col].score = {0,0};
 			if (near != E_FAR) {
-				last2Cell = lastCell;
-				last2CellType = lastCellType;
-				lastCell = &board[row][col];
-				lastCellType = near;
 				setNEAR(row, col, near);
 			}
 		}
@@ -931,7 +988,7 @@ public:
 	/*
 	 * After temporary setting a Cell to X' or O' for scoring, now return it and its neighbor to prev values
 	 */
-	cell * restoreCell(int saveVal, int row, int col) {
+	int restoreCell(int saveVal, int row, int col) {
 		cell *currCell;
 		int rval;
 		for (int dir = East; dir <= SEast; dir++) {
@@ -942,26 +999,50 @@ public:
 					rval = currCell->val & (X_ | O_);
 					if (rval)
 						i = 0;
-
 				} while ((rval != 3) && rval);
-				//			cout <<"N-" << *currCell << hex << currCell->val;
-				currCell->val = currCell->val & ~(E_CAL);
+			currCell->val = currCell->val & ~(E_CAL);
 				if (currCell->val & (E_TNEAR)) {
-//					currCell->score= {0,0};
 					currCell->val = E_FAR; // only clear the cell with E_TNEAR (temporary NEAR) to FAR
-//				} else if (currCell->val & (E_NEAR)) {
-//					currCell->score= {0,0};
+
 				} else if (rval == 3) // boundary
 					break;
-
-				//			cout <<"-"<< currCell->val;
-
 			}
 		}
+		rval = board[row][col].val;
 		board[row][col].val = saveVal & ~(E_CAL); // Return the val to prev
-		return currCell;
+		return rval;
 	}
 
+	void undo1move() {
+		cout << "Undo p=" << lastMoveIndex << "moveCnt=" << moveCnt << endl;
+		cout << "saveLast2p=" << saveLast2p << endl;
+
+		if ((lastMoveIndex - 2 != saveLast2p) && moveCnt > 0) {
+			moveCnt -= 2;
+			lastMoveIndex = (lastMoveIndex - 2) & 0xff;
+			movesHistVal[lastMoveIndex + 2] = restoreCell(E_FAR,
+					movesHist[lastMoveIndex + 2]->rowVal,
+					movesHist[lastMoveIndex + 2]->colVal);
+			movesHistVal[lastMoveIndex + 1] = restoreCell(E_FAR,
+					movesHist[lastMoveIndex + 1]->rowVal,
+					movesHist[lastMoveIndex + 1]->colVal);
+		}
+	}
+	void redo1move() {
+		cout << "Redo p=" << lastMoveIndex << "moveCnt=" << moveCnt << endl;
+		cout << "saveLast2p=" << saveLast2p << endl;
+
+		if (lastMoveIndex != saveLast2p) {
+			moveCnt += 2;
+			restoreCell(movesHistVal[lastMoveIndex + 2],
+					movesHist[lastMoveIndex + 2]->rowVal,
+					movesHist[lastMoveIndex + 2]->colVal);
+			restoreCell(movesHistVal[lastMoveIndex + 1],
+					movesHist[lastMoveIndex + 1]->rowVal,
+					movesHist[lastMoveIndex + 1]->colVal);
+			lastMoveIndex = (lastMoveIndex + 2) & 0xff;
+		}
+	}
 	void reCalBoard(int currVal, int depth) {
 		for (int row = 1; row < size; row++)
 			for (int col = 1; col < size; col++) {
@@ -1081,8 +1162,6 @@ public:
 		cout << endl;
 	}
 	void modifyDebugFeatures(int a);
-	void undo1move();
-	void redo1move();
 	cell * inputCell() {
 		int row, col;
 		char ccol, inputstr[20];
@@ -1101,9 +1180,9 @@ public:
 	Line extractLine(int inVal, int dir, int x, int y, bool &ending,
 			bool debugThis);
 	aScore score1Cell(int setVal, int row, int col, int depth, bool debugThis);
-	scoreElement evalAllCell(int val, int width, int depth, int currentWidth,
-			bool maximizingPlayer, aScore alpha, aScore beta, breadCrumb &b,
-			bool debugThis, bool &redo, traceCell * trace, tracer *headTracer);
+	scoreElement evalAllCell(int val, int width, int depth,
+			bool maximizingPlayer, aScore alpha, aScore beta, bool debugThis,
+			bool &redo, traceCell * trace, tracer *headTracer);
 	scoreElement terminateScore;
 	cellDebug cdbg;
 	int nextWidth(int depth, int width) {

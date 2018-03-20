@@ -10,7 +10,11 @@
 #include <fstream>
 #include <locale>
 #include <string.h>
+#include <chrono>
+
 using namespace std;
+using namespace std::chrono;
+
 #include "caro.h"
 #define convertToRow(a) isalpha(a)? (islower(a)? (a-'a'+1):(a-'A'+1)):1
 #define isX(a) a=='X'?X_:O_
@@ -73,6 +77,8 @@ void getInput(FILE *finput, caro *agame) {
 }
 
 int main() {
+	int setWidthDepth[][2] = { { 14, 8 }, { 14, 8 }, { 5, 10 }, { 4, 10 }, { 4,
+			10 } };
 	caro agame(15);
 	int row, col, mode, dir;
 	char name[4], testType[20];
@@ -81,11 +87,8 @@ int main() {
 	points width = 5;
 	int depth = 5;
 	extern int search_depth, search_width;
-	extern tsDebug aDebug;
-	extern int debugScoring, debugScoringd, debugScoringAll, debugBestPath,
-			debugAllPaths, debugAI, debugAIbest, debugHash,docheck;
+	extern int debugScoring, debugScoringd, debugScoringAll, debugHash, docheck;
 	extern int interactiveDebug;
-	int twoPass = 0;
 	bool redonext = false;
 
 	bool maximizingPlayer = true;
@@ -108,10 +111,7 @@ int main() {
 	fn = fn + aname;
 	cout << fn << endl;
 	finput = fopen(fn.c_str(), "r");
-	for (int i = search_depth; i >= 0; i--) {
-		aDebug.debugWidthAtDepth[i] = -9999;
-	}
-	aDebug.debugWidthAtDepth[search_depth] = 0;
+
 	if (finput) {
 		bool ending = false;
 
@@ -160,7 +160,7 @@ int main() {
 			case 's': {
 				Line tempLine = agame.extractLine(X_, dir, row, col, ending,
 						true);
-				tempLine.evaluate(true,ending);
+				tempLine.evaluate(true, ending);
 				tempLine.print();
 			}
 				break;
@@ -189,13 +189,13 @@ int main() {
 				scoreElement result;
 				breadCrumb top_bc(depth);
 				if (testType[1] == 'X')
-					result = agame.evalAllCell(X_, width, depth, 0,
-							!maximizingPlayer, NINF, INF, top_bc, false,
-							redonext, nullptr, &aTracer); // width = dir; depth = row
+					result = agame.evalAllCell(X_, width, depth,
+							!maximizingPlayer, NINF, INF, false, redonext,
+							nullptr, &aTracer); // width = dir; depth = row
 				else
-					result = agame.evalAllCell(O_, width, depth, 0,
-							!maximizingPlayer, NINF, INF, top_bc, false,
-							redonext, nullptr, &aTracer);
+					result = agame.evalAllCell(O_, width, depth,
+							!maximizingPlayer, NINF, INF, false, redonext,
+							nullptr, &aTracer);
 				printf("Score=%x, row=%d, col=%C", result.myScore,
 						(result.cellPtr)->rowVal,
 						(result.cellPtr)->colVal - 1 + 'A');
@@ -216,12 +216,22 @@ int main() {
 				depth = search_depth;
 
 			case 'g':
-				aDebug.debugBreakAtDepth = -12345;
+				cout << "Opponent is White==O,  Black==X ;";
+				cout << "Enter X/O:";
+				char gameCh;
+				cin >> gameCh;
+				if (gameCh == 'O') {
+					agame.setCell(isNotX(gameCh), 8, 8, E_NEAR);
+					agame.evalAllCell(isNotX(gameCh), 20, -1, maximizingPlayer,
+					NINF, INF, false, redonext, nullptr, &aTracer);
+				}
 				while (col < 20) {
 					int redo = 1;
+					char fans[10], ccol;
+
 					do {
 
-						cout << "Enter row col X/O" << endl;
+						cout << "Enter row col" << endl;
 						cout
 								<< "-1 undo -2 redo -3 debugScoring, -4 debugBestPath,"
 								<< "-5 debugBestPath -6 debugAllPaths, -7 debugAI, "
@@ -230,21 +240,19 @@ int main() {
 								<< " -25 debugHash -98 docheck -99 interactiveDebug "
 								<< " enter ? on col for details" << endl;
 
-						cin >> row;
+						cin >> fans;
+						if (islower(fans[strlen(fans)-1])) {
+							sscanf(fans, "%d%c", &row, &ccol);
+						} else {
+							sscanf(fans, "%d", &row);
+							ccol = '=';
+						}
+
 						if (row <= -1) {
 							agame.cdbg.reset();
 
 							switch (row) {
-							case -10: {
-								char adebugstr[40];
-								cout << "Enter TRACE debug:";
-								cin >> adebugstr;
-								agame.cdebug.enterDebugTrace(adebugstr);
-								cout << "Enter Cellinfo:";
-								cin >> adebugstr;
-								agame.cdebug.enterDebugCell(adebugstr);
-								break;
-							}
+
 							case -11: {
 								int row, col;
 								char ccol[10];
@@ -269,12 +277,7 @@ int main() {
 								} while (row > 0);
 								break;
 							}
-							case -12:
-								for (int i = search_depth; i >= 0; i--) {
-									aDebug.debugWidthAtDepth[i] = -1;
-								}
-								aDebug.debugWidthAtDepth[search_depth] = 0;
-								break;
+
 							case -13: {
 								char ffn[80] = "savefile.txt";
 								for (int i = 1; i < 1000; i++) {
@@ -327,75 +330,15 @@ int main() {
 
 								break;
 							case -98:
-								cout << "Turn " << FLIP(docheck) << " docheck" << endl;
+								cout << "Turn " << FLIP(docheck) << " docheck"
+										<< endl;
 							case -99:
 								cout << "Turn " << FLIP(interactiveDebug)
 										<< " interactiveDebug" << endl;
-
-								break;
-
-							case -4:
-								agame.cdbg.reset();
-
-								cout << "Turn " << FLIP(debugBestPath)
-										<< " debugBestPath" << endl;
-								if (debugBestPath) {
-									cout
-											<< "Enter debug width ID at each depth ";
-									for (int i = depth; i >= 0; i--) {
-										int enterWidth;
-										cout << "at Depth= " << i << " = ";
-										cin >> enterWidth;
-										aDebug.debugWidthAtDepth[i] =
-												enterWidth;
-									}
-									cout
-											<< "Enter depth # to break for prompt: ";
-									cin >> aDebug.debugBreakAtDepth;
-									if (aDebug.debugBreakAtDepth == (depth))
-										aDebug.enablePrinting = 1;
-									else
-										aDebug.enablePrinting = 0;
-								}
-								break;
-							case -5:
-								agame.cdbg.reset();
-
-								cout << "Turn " << FLIP(debugBestPath)
-										<< " debugBestPath" << endl;
-								if (debugBestPath)
-									twoPass = 1;
-								else
-									twoPass = 0;
-								for (int i = depth; i >= 0; i--) {
-									aDebug.debugWidthAtDepth[i] = -1;
-								}
-								aDebug.debugBreakAtDepth = -10;
-								break;
-							case -6:
-								cout << "Turn " << FLIP(debugAllPaths)
-										<< " debugAllPaths" << endl;
-								if (row == -5) {
-									cout << "Turn " << FLIP(debugAIbest)
-											<< " debugAIbest" << endl;
-								}
-								break;
-							case -7:
-								cout << "Turn " << FLIP(debugAI) << " debugAI"
-										<< endl;
-								if (debugAI) {
-									cout
-											<< "Enter the % of I at each Depth Search: "
-											<< endl;
-									for (int i = search_depth; i >= 0; i--) {
-										cin >> aDebug.debugWidthAtDepth[i];
-									}
-								}
 								break;
 							case -1:
 								agame.undo1move();
 								agame.print(SYMBOLMODE);
-
 								break;
 
 							case -2:
@@ -408,111 +351,117 @@ int main() {
 							}
 						} else
 							redo = 0;
+						if (fans[0] == '?')
+							help();
+						if ((ccol == '=')) {
+							cell* aptr = agame.possMove[row-1]; // -1 to not use zero
+							col = aptr->colVal;
+							row = mapping(aptr->rowVal);
+							cout << *aptr;
+							printf(" AT possMove  row=%d col=%d\n", row, col);
+						} else {
+							col = ccol - 'a' + 1;
+						}
+						if ((row > 15) || (col > 15)
+								|| (agame.board[row][col].val & (X_ | O_))) {
+							cout << "Bad entry ";
+							redo = 1;
+						}
+						cout << "fans=" << fans << " row=" << row << " col="
+								<< col << endl;
 					} while (redo);
-					char gameCh;
-					cin >> name >> gameCh;
-					if (name[0] == '?')
-						help();
 
-					col = name[0] - 'a' + 1;
 					agame.my_AI_Play = O_;
 					scoreElement result;
 					agame.maxDepth = depth;
-					cell * aptr = agame.setCell(isX(gameCh), row, col, E_NEAR);
-					breadCrumb top_bc(depth); // at this level is depth+1
-					top_bc.top.ptr = aptr;
-					for (int passNo = 0; passNo <= twoPass; passNo++) {
-						cout << "Pass no " << passNo << endl;
-						agame.terminate = 0;
-						if (twoPass & (passNo == 0)) {
-							agame.cdbg.reset();
-							aDebug.lowDepth = depth + 1;
-							for (int d = depth; d >= 0; d--) {
-								aDebug.debugWidthAtDepth[d] = -999;
-							}
-						}
-						agame.evalCnt = 0;
-						agame.my_AI_Play = isNotX(gameCh);
-						int tw =
-								passNo > 0 ?
-										aDebug.debugWidthAtDepth[depth] : 0;
-						agame.trace.clear();
-						{
-							bool debugThis = false;
-
-							if (interactiveDebug) {
-								debugThis = true;
-							}
-							do {
-								redonext = false;
-								agame.scorecnt = agame.skipcnt = 0;
-								result = agame.evalAllCell(isNotX(gameCh),
-										width, depth, tw, maximizingPlayer,
-										NINF, INF, top_bc, debugThis, redonext,
-										nullptr, &aTracer);
-								if (redonext)
-									delete aTracer.next;
-							} while (redonext);
-							delete aTracer.next;
-
-						}
-						aDebug.enablePrinting = 0;
-
-						cout << top_bc << endl;
-						hist pArray;
-
-						top_bc.extractTohistArray(pArray);
-						cout
-								<< "_____________________________________________________________\n";
-						agame.print(pArray);
-
-						cout << "aDebug.debugWidthAtDepth " << endl;
-
-						for (int d = depth - 1; d >= 0; d--) {
-							aDebug.debugWidthAtDepth[d] =
-									top_bc.bestWidthAtDepth(d + 1); // from the higher best
-							agame.cdbg.add(top_bc.bestCellAtDepth(d + 1), d, 0);
-							cout << "  d=" << d << "w="
-									<< aDebug.debugWidthAtDepth[d];
-
-						}
-						//		agame.cdbg.add(top_bc.bestCellAtDepth(0), 0, 0);
-						cout << endl;
+					row = reverseMapping(row);
+					agame.setCell(isX(gameCh), row, col, E_NEAR);
+					agame.terminate = 0;
+					agame.evalCnt = 0;
+					agame.my_AI_Play = isNotX(gameCh);
+					agame.trace.clear();
+					bool debugThis = false;
+					if (interactiveDebug) {
+						debugThis = true;
 					}
-					char ans;
-					cout
-							<< "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++";
-					cout << "\nRESULT= " << *result.cellPtr << endl;
-					cout << "set it ?";
-					cin >> ans;
+					agame.print(SYMBOLMODE);
+					agame.rsum_chk_max = 0;
+					agame.rsum_chk_min = 10;
+					// Get starting timepoint
+					auto start = high_resolution_clock::now();
 
-					cout
-							<< "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++";
-					if (ans == 'y') {
+					do {
+						redonext = false;
+						agame.scorecnt = agame.skipcnt = 0;
+						result = agame.evalAllCell(isNotX(gameCh), width, depth,
+								maximizingPlayer,
+								NINF, INF, debugThis, redonext, nullptr,
+								&aTracer);
+						if (redonext)
+							delete aTracer.next;
+					} while (redonext);
+					delete aTracer.next;
+					// Get ending timepoint
+					auto stop = high_resolution_clock::now();
+
+					// Get duration. Substart timepoints to
+					// get durarion. To cast it to proper unit
+					// use duration cast method
+					auto duration = duration_cast<microseconds>(stop - start);
+					float elapse = ((float) duration.count() / 1000000.0);
+					cout << "Result =" << result << "  ";
+					cout << "Time taken by function: " << elapse << " seconds"
+							<< " at depth =" << depth << endl;
+
+					int avg_chk = (agame.rsum_chk_max + agame.rsum_chk_min + 1)
+							/ 2;
+					width = setWidthDepth[avg_chk][0];
+					int ndepth = setWidthDepth[avg_chk][1];
+					if ((ndepth <= depth) && (elapse < 2.0)) {
+						depth++;
+					} else {
+						depth = ndepth;
+					}
+					cout << "Avg chk = " << avg_chk << " depth=" << depth
+							<< " Width=" << width << endl;
+					char ans[10];
+
+					/*
+					 hist pArray;
+					 << "_____________________________________________________________\n";
+					 agame.print(pArray);
+
+					 cout
+					 << "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++";
+					 cout << "\nRESULT= " << *result.cellPtr << endl;
+					 cout << "set it ? or (row col char)";
+					 cin.clear();
+					 cin.ignore(numeric_limits<streamsize>::max(), '\n');
+					 cin >> ans;
+					 cout
+					 << "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++";
+					 */
+					ans[0] = 'y';
+					if (ans[0] == 'y') {
 						agame.setCell((int) (isNotX(gameCh)),
 								result.cellPtr->rowVal, result.cellPtr->colVal,
 								E_NEAR);
-
 					} else {
-						cout << "Enter row col val" << endl;
+						char ccol;
 						int row;
-						char ach, ccol;
-						//	agame.print(SYMBOLMODE);
-						agame.print(SCOREMODE);
-
-						cin >> row >> ccol >> ach;
+						sscanf(ans, "%d%c", &row, &ccol);
 						int col = ccol - 'a' + 1;
-						cout << row << " " << ccol << " " << (int) (isX(ach))
-								<< endl;
-						agame.setCell((int) (isX(ach)), row, col, E_NEAR);
-					}
+						cout << row << " " << ccol << " "
+								<< (int) (isNotX(gameCh)) << endl;
+						row = reverseMapping(row);
 
-					ahash.print();
-					if (twoPass) {
-						cout << "lowestD=" << aDebug.lowDepth << endl;
-						cout << top_bc << endl;
+						agame.setCell((int) (isNotX(gameCh)), row, col, E_NEAR);
 					}
-					agame.print(SYMBOLMODE);
+					//ahash.print();
+					result = agame.evalAllCell(isNotX(gameCh), 20, -1,
+							maximizingPlayer,
+							NINF, INF, debugThis, redonext, nullptr, &aTracer);
+					//agame.print(SYMBOLMODE);
 				}
 				agame.reset();
 				break;
