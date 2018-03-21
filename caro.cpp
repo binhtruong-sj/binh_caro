@@ -9,8 +9,10 @@
 #include <vector>
 #include <algorithm>
 #include <cstring>
+#include <chrono>
 
 using namespace std;
+using namespace std::chrono;
 
 //#define VERBOSE3 1
 //#define DEBUGSCORING 1
@@ -41,7 +43,7 @@ using namespace std;
 #define prompt(a) {cout << a << endl; cin.get(); }
 // (a+b)/2 =50 percent -> a+b = 2*p
 #define fscale(a,b,p)  a+((b-a)*p)/100
-
+#define runtimeInMicroSecond 9000000 // 9 seconds
 #include "caro.h"
 int search_depth = 5;
 int search_width = 5;
@@ -590,8 +592,8 @@ void caro::modifyDebugFeatures(int debugId) {
  *
  */
 scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
-		bool isMax, aScore alpha, aScore beta, bool debugThis, bool &redo,
-		traceCell * callerTrace, tracer *headTracer) {
+		int min_depth, bool isMax, aScore alpha, aScore beta, bool debugThis,
+		bool &redo, traceCell * callerTrace, tracer *headTracer) {
 	caro backup(15);
 
 	cell *cPtr;
@@ -625,7 +627,7 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 	previousMovePoints = {0,0,0};
 	int highestConnected = 0;
 	for (int row = 1; row < size; row++) {
-		if (terminated && (in_depth >= 0))
+		if (terminated && (in_depth >= min_depth))
 			break;
 		for (int col = 1; col < size; col++) {
 			if (board[row][col].val & (E_NEAR | E_TNEAR)) {
@@ -654,7 +656,7 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 						terminated = 1;
 						if (debugThis)
 							cout << "AI-Win=" << bestScore;
-						if (in_depth >= 0)
+						if (in_depth >= min_depth)
 							break;
 					}
 				} else if (bestScore.oppScore >= MAGICNUMBER) {
@@ -663,7 +665,7 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 						terminated = 1;
 						if (debugThis)
 							cout << "Human-win=" << bestScore;
-						if (in_depth >= 0)
+						if (in_depth >= min_depth)
 							break;
 					}
 				}
@@ -840,7 +842,9 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 //--------------------------------------
 	if (docheck)
 		save(backup);
-	if ((terminated == 0) && (in_depth > 0)) {
+	int adjustDepth = 0;
+
+	if ((terminated == 0) && (in_depth > min_depth)) {
 		if (isMax)
 			bestScore = dworstValue();
 			else
@@ -875,13 +879,39 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 					print(SYMBOLMODE2);
 					cout << "---------------------------TRACE MATCH---------------" << endl;
 				}
+				int desiredRuntime = runtimeInMicroSecond/in_width/8;
 				do {
 					bool debugNext = false;
 					debugNext = debug.find(i);
-
+					auto start = high_resolution_clock::now();
+					int new_depth = min_depth-adjustDepth;
+					if(in_depth == maxDepth) {
+						cout << "New depth =" << new_depth << " Adjust=" << adjustDepth << endl;
+					}
 					returnScore = evalAllCell(nextPlay, nextLevelWidth, in_depth - 1,
+							new_depth,
 							!isMax, alpha, beta, debugNext, redoNext,
 							&currTrace, tracerArrayPtr[i]);
+					if(in_depth == maxDepth) {
+						auto stop = high_resolution_clock::now();
+						auto duration = duration_cast<microseconds>(stop - start);
+						int ratio = (duration.count()*10 / desiredRuntime);
+						int save_adjustDepth = adjustDepth;
+						if(ratio <=10) {
+							adjustDepth += ratio/2;
+						} else if(ratio > 100) {
+							adjustDepth -= ratio/400;
+						}
+						if(abs(adjustDepth) > 10) {
+							adjustDepth = save_adjustDepth;
+						}
+						if((adjustDepth+min_depth) > in_depth)
+						adjustDepth = in_depth - min_depth -2;
+						cout << " ratio =" << ratio;
+					} else {
+						adjustDepth = 0;
+					}
+
 					if (redoNext)
 					delete tracerArrayPtr[i]->next;
 				}while(redoNext);
@@ -1020,7 +1050,7 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 			}
 
 		}
-	if ((in_depth > 1) && 0) {
+	if ((in_depth > (min_depth)) && 0) {
 		cout << "depth=" << in_depth << " max=" << isMax << "bestScore ="
 				<< bestScore << endl;
 		char ach;

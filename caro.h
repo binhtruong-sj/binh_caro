@@ -1179,7 +1179,7 @@ public:
 	Line extractLine(int inVal, int dir, int x, int y, bool &ending,
 			bool debugThis);
 	aScore score1Cell(const int setVal, const int row, const int col, bool debugThis);
-	scoreElement evalAllCell(int val, int width, int depth,
+	scoreElement evalAllCell(int val, int width, int depth, int min_depth,
 			bool maximizingPlayer, aScore alpha, aScore beta, bool debugThis,
 			bool &redo, traceCell * trace, tracer *headTracer);
 	scoreElement terminateScore;

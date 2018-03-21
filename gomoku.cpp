@@ -189,11 +189,11 @@ int main() {
 				scoreElement result;
 				breadCrumb top_bc(depth);
 				if (testType[1] == 'X')
-					result = agame.evalAllCell(X_, width, depth,
+					result = agame.evalAllCell(X_, width, depth,0,
 							!maximizingPlayer, NINF, INF, false, redonext,
 							nullptr, &aTracer); // width = dir; depth = row
 				else
-					result = agame.evalAllCell(O_, width, depth,
+					result = agame.evalAllCell(O_, width, depth,0,
 							!maximizingPlayer, NINF, INF, false, redonext,
 							nullptr, &aTracer);
 				printf("Score=%x, row=%d, col=%C", result.myScore,
@@ -222,7 +222,7 @@ int main() {
 				cin >> gameCh;
 				if (gameCh == 'O') {
 					agame.setCell(isNotX(gameCh), 8, 8, E_NEAR);
-					agame.evalAllCell(isNotX(gameCh), 20, -1, maximizingPlayer,
+					agame.evalAllCell(isNotX(gameCh), 20, -1,0, maximizingPlayer,
 					NINF, INF, false, redonext, nullptr, &aTracer);
 				}
 				while (col < 20) {
@@ -377,7 +377,8 @@ int main() {
 
 					agame.my_AI_Play = O_;
 					scoreElement result;
-					agame.maxDepth = depth;
+					agame.maxDepth = depth+10;
+					int minDepth = 0;
 					row = reverseMapping(row);
 					agame.setCell(isX(gameCh), row, col, E_NEAR);
 					agame.my_AI_Play = isNotX(gameCh);
@@ -395,7 +396,7 @@ int main() {
 					do {
 						redonext = false;
 						agame.localCnt = 0;
-						result = agame.evalAllCell(isNotX(gameCh), width, depth,
+						result = agame.evalAllCell(isNotX(gameCh), width, depth+10,minDepth+10,
 								maximizingPlayer,
 								NINF, INF, debugThis, redonext, nullptr,
 								&aTracer);
@@ -460,7 +461,7 @@ int main() {
 						agame.setCell((int) (isNotX(gameCh)), row, col, E_NEAR);
 					}
 					//ahash.print();
-					result = agame.evalAllCell(isNotX(gameCh), 20, -1,
+					result = agame.evalAllCell(isNotX(gameCh), 20, -1, 0,
 							maximizingPlayer,
 							NINF, INF, debugThis, redonext, nullptr, &aTracer);
 					//agame.print(SYMBOLMODE);
