@@ -412,9 +412,6 @@ int main() {
 					// use duration cast method
 					auto duration = duration_cast<microseconds>(stop - start);
 					float elapse = ((float) duration.count() / 1000000.0);
-					cout << "Result =" << result << "  ";
-					cout << "Time taken by function: " << elapse << " seconds"
-							<< " at depth =" << depth << endl;
 
 					int avg_chk = (agame.rsum_chk_max + agame.rsum_chk_min + 1)
 							/ 2;
@@ -428,22 +425,6 @@ int main() {
 					cout << "Avg chk = " << avg_chk << " depth=" << depth
 							<< " Width=" << width << endl;
 					char ans[10];
-
-					/*
-					 hist pArray;
-					 << "_____________________________________________________________\n";
-					 agame.print(pArray);
-
-					 cout
-					 << "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++";
-					 cout << "\nRESULT= " << *result.cellPtr << endl;
-					 cout << "set it ? or (row col char)";
-					 cin.clear();
-					 cin.ignore(numeric_limits<streamsize>::max(), '\n');
-					 cin >> ans;
-					 cout
-					 << "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++";
-					 */
 					ans[0] = 'y';
 					if (ans[0] == 'y') {
 						agame.setCell((int) (isNotX(gameCh)),
@@ -465,6 +446,10 @@ int main() {
 							maximizingPlayer,
 							NINF, INF, debugThis, redonext, nullptr, &aTracer);
 					//agame.print(SYMBOLMODE);
+					cout << "Result =" << result << "  ";
+					cout << "Time taken by function: " << elapse << " seconds"
+							<< " at depth =" << depth << endl;
+
 				}
 				agame.reset();
 				break;
