@@ -47,6 +47,7 @@
 #define SYMBOLMODE 0
 #define SYMBOLMODE2 2
 #define SYMBOLMODE3 4
+#define SYMBOLMODE4 12
 
 #define SCOREMODE 6
 
@@ -288,6 +289,15 @@ public:
 		}
 		case (SYMBOLMODE3 + 1): {
 			pval = score.myScore - score.oppScore;
+			break;
+		}
+		case SYMBOLMODE4: {
+			char ach = (char) convertCellToStr(val);
+			printf("%3c ", ach);
+			return;
+		}
+		case (SYMBOLMODE4 + 1): {
+			pval = val;
 			break;
 		}
 		case SCOREMODE: // aiPlay
@@ -760,28 +770,20 @@ public:
 	}
 
 	cell board[21][21];
-	int scorecnt = 0, skipcnt = 0;
-	int prevD;
-	int evalCnt = 0;
-	aScore previousMovePoints;
-	int myMoveAccScore = 0;
-	int opnMoveAccScore = 0;
 	int size = 17;
 	int maxDepth = 50;
-	int terminate;
 	int my_AI_Play = X_;
 	cell * movesHist[256]; // fixed at 256, change to use remeainder if different setting
 	int movesHistVal[256];
 	int lastMoveIndex = 0;
 	int saveLast2p;
-	int moveCnt = 0;
+	int moveCnt = 0, localCnt =0;
 	int rsum_chk_max = 0;
 	int rsum_chk_min = 0;
-	cell* possMove[40];
+	cell* possMove[50];
 	caro(int table_size) {
 		size = table_size + 1;
 		// Setup pointer to ajacent cells, only from 1 to size-1
-		terminate = 0;
 
 		for (int row = 0; row <= size; row++) {
 			for (int col = 0; col <= size; col++) {
@@ -857,8 +859,7 @@ public:
 	}
 
 	void print(int mode) {
-		cout << "MODE=" << mode << " skipcnt=" << skipcnt << " scorecnt="
-				<< scorecnt << endl;
+
 		int lastMoveIndex1 = lastMoveIndex - 1;
 
 		for (int row = 0; row <= size; row++) {
@@ -883,10 +884,6 @@ public:
 		cout << "    ";
 		for (char pchar = 'A'; pchar <= 'P'; pchar++)
 			printf("%3C ", pchar);
-		cout << endl;
-
-		cout << "EvalCnt=" << evalCnt << " BoardScore=" << previousMovePoints
-				<< endl;
 		cout << endl;
 	}
 
@@ -927,7 +924,7 @@ public:
 				if (i >= 40)
 					board[row][col].print(SYMBOLMODE);
 				else
-					printf("%3d ", i+1);
+					printf("%3d ", i + 1);
 
 				if (movesHist[lastMoveIndex] == &board[row][col])
 					board[row][col].val ^= E_LAST;
@@ -962,22 +959,23 @@ public:
 	/*
 	 * set a cell to X or O
 	 */
+	int lastRow1, lastCol1;
+	int lastRow2, lastCol2;
 	cell * setCell(int setVal, int row, int col, int near) {
 		if ((board[row][col].val & (X_ | O_)) == 0) { // this check is bc of lazyness of setting up board
-			if (setCellCnt++ == printInterval) {
-				setCellCnt = 0;
-			}
 			if (near == E_NEAR) { // Only real set can be UNDO
-				evalCnt = 0;
 				// code to handle undo
 				moveCnt++;
 				lastMoveIndex = (lastMoveIndex + 1) & 0xFF; // wrap around -- circular
 				saveLast2p = lastMoveIndex;
 				movesHist[lastMoveIndex] = &board[row][col];
 				movesHistVal[lastMoveIndex] = board[row][col].val;
+				board[row][col].score = {moveCnt,0};
+			} else {
+				localCnt++;
+				board[row][col].score = {moveCnt+localCnt,0};
 			}
 			board[row][col].val = setVal;
-			board[row][col].score = {0,0};
 			if (near != E_FAR) {
 				setNEAR(row, col, near);
 			}
@@ -991,6 +989,7 @@ public:
 	int restoreCell(int saveVal, int row, int col) {
 		cell *currCell;
 		int rval;
+		localCnt--;
 		for (int dir = East; dir <= SEast; dir++) {
 			currCell = &board[row][col];
 			for (int i = 0; i < InspectDistance; i++) {
@@ -1000,7 +999,7 @@ public:
 					if (rval)
 						i = 0;
 				} while ((rval != 3) && rval);
-			currCell->val = currCell->val & ~(E_CAL);
+				currCell->val = currCell->val & ~(E_CAL);
 				if (currCell->val & (E_TNEAR)) {
 					currCell->val = E_FAR; // only clear the cell with E_TNEAR (temporary NEAR) to FAR
 
@@ -1047,7 +1046,7 @@ public:
 		for (int row = 1; row < size; row++)
 			for (int col = 1; col < size; col++) {
 				if ((board[row][col].val & (O_ | X_)) == 0)
-					score1Cell(currVal, row, col, depth, false);
+					score1Cell(currVal, row, col, false);
 			}
 	}
 
@@ -1179,7 +1178,7 @@ public:
 	void clearScore();
 	Line extractLine(int inVal, int dir, int x, int y, bool &ending,
 			bool debugThis);
-	aScore score1Cell(int setVal, int row, int col, int depth, bool debugThis);
+	aScore score1Cell(const int setVal, const int row, const int col, bool debugThis);
 	scoreElement evalAllCell(int val, int width, int depth,
 			bool maximizingPlayer, aScore alpha, aScore beta, bool debugThis,
 			bool &redo, traceCell * trace, tracer *headTracer);

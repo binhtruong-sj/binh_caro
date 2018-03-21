@@ -353,23 +353,19 @@ void FourLines::print() {
 	}
 }
 
-aScore caro::score1Cell(int currPlay, int row, int col, int depth,
+aScore caro::score1Cell(const int currPlay, const int row, const int col,
 		bool debugThis) {
 	FourLines astar;
 	bool saveCheck = false;
 	bool redothisone = false;
 	aScore testSaveScore = { 0, 0, 0 };
 	if (board[row][col].val & E_CAL) {
-		skipcnt++;
 		// calculating overall score
-		previousMovePoints += board[row][col].score;
-		previousMovePoints.connectedOrCost = depth;
 		return board[row][col].score;
 
 		saveCheck = true;
 		testSaveScore = board[row][col].score;
 	}
-	scorecnt++;
 	aScore rtn;
 	rtn.connectedOrCost = 0;
 
@@ -392,7 +388,6 @@ aScore caro::score1Cell(int currPlay, int row, int col, int depth,
 			setCell(curVal, row, col, E_FAR);
 
 			for (int dir = East; dir < West; dir++) {
-				evalCnt++;
 				astar.Xlines[dir] = extractLine(currPlay, dir, row, col, ending,
 						debugThis);
 				points tscore = astar.Xlines[dir].evaluate((currPlay == curVal),
@@ -487,7 +482,6 @@ aScore caro::score1Cell(int currPlay, int row, int col, int depth,
 
 				cout << "SHORTCUT different, saveScore =" << testSaveScore
 						<< " newScore =" << rtn;
-				printDebugInfo(row, col, nullptr, depth);
 				print(SYMBOLMODE2);
 				redothisone = true;
 				debugScoringAll = 1;
@@ -497,8 +491,6 @@ aScore caro::score1Cell(int currPlay, int row, int col, int depth,
 
 	} while (redothisone);
 	// calculating overall score
-	previousMovePoints += rtn;
-	previousMovePoints.connectedOrCost = depth;
 
 	return rtn;
 }
@@ -614,6 +606,9 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 	traceCell currTrace;
 	currTrace.prev = callerTrace;
 	currTrace.cell = nullptr;
+
+	aScore previousMovePoints;
+
 	if (debugThis) {
 		cout << "__________________" << endl;
 		printTrace();
@@ -630,11 +625,13 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 	previousMovePoints = {0,0,0};
 	int highestConnected = 0;
 	for (int row = 1; row < size; row++) {
-		if (terminated && (in_depth >=0))
+		if (terminated && (in_depth >= 0))
 			break;
 		for (int col = 1; col < size; col++) {
 			if (board[row][col].val & (E_NEAR | E_TNEAR)) {
-				bestScore = score1Cell(currPlay, row, col, in_depth, debugThis);
+				bestScore = score1Cell(currPlay, row, col, debugThis);
+				previousMovePoints += bestScore;
+				previousMovePoints.connectedOrCost = in_depth;
 				if (abs(bestScore.connectedOrCost) > 2) {
 					if (abs(bestScore.connectedOrCost)
 							> abs(highestConnected)) {
@@ -689,11 +686,10 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 				break;
 		}
 		possMove[i] = nullptr;
-		print(SYMBOLMODE);
+		print(SYMBOLMODE2);
 		print(possMove);
 		return bestScore;
 	} else if (terminated) {
-		bestScore = termScore;
 		bestScore = previousMovePoints;
 
 		if (debugScoring || debugThis) {
@@ -703,7 +699,6 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 					convertToChar(my_AI_Play));
 			cout << " score=" << bestScore << " " << previousMovePoints
 					<< "TERMINATED" << endl;
-
 		}
 
 	} else {
@@ -853,7 +848,6 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 			vector <tracer *>tracerArrayPtr(thisWidth);
 			for (int i = 0; i < thisWidth; i++) {
 				if(terminated) break;
-				prevD = in_depth;
 				cPtr = bestScoreArray[i].cellPtr;
 				tracerArrayPtr[i] = new tracer(&board[cPtr->rowVal][ cPtr->colVal]);
 				tracerArrayPtr[i]->prev = headTracer;

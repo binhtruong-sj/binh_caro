@@ -168,7 +168,7 @@ int main() {
 			case 'X': // score 1 cell
 				debugScoringAll = 1;
 				cout << "Score ";
-				cout << agame.score1Cell(X_, row, col, 0, true);
+				cout << agame.score1Cell(X_, row, col, true);
 				cout << " for X at row " << row;
 				cout << "col " << convertToChar(col) << endl;
 				agame.print(SCOREMODE);
@@ -176,7 +176,7 @@ int main() {
 			case 'O': // score 1 cell
 				debugScoringAll = 1;
 
-				cout << "Score " << agame.score1Cell(O_, row, col, 0, true)
+				cout << "Score " << agame.score1Cell(O_, row, col, true)
 						<< " for O at row " << row << "col "
 						<< convertToChar(col) << endl;
 				agame.print(SCOREMODE);
@@ -241,7 +241,7 @@ int main() {
 								<< " enter ? on col for details" << endl;
 
 						cin >> fans;
-						if (islower(fans[strlen(fans)-1])) {
+						if (islower(fans[strlen(fans) - 1])) {
 							sscanf(fans, "%d%c", &row, &ccol);
 						} else {
 							sscanf(fans, "%d", &row);
@@ -351,20 +351,24 @@ int main() {
 							}
 						} else
 							redo = 0;
+						int orow ;
 						if (fans[0] == '?')
 							help();
 						if ((ccol == '=')) {
 							cell* aptr = agame.possMove[row-1]; // -1 to not use zero
 							col = aptr->colVal;
-							row = mapping(aptr->rowVal);
+							orow = aptr->rowVal;
+							row = mapping(orow);
 							cout << *aptr;
 							printf(" AT possMove  row=%d col=%d\n", row, col);
 						} else {
 							col = ccol - 'a' + 1;
 						}
 						if ((row > 15) || (col > 15)
-								|| (agame.board[row][col].val & (X_ | O_))) {
-							cout << "Bad entry ";
+								|| (agame.board[orow][col].val & (X_ | O_))) {
+							cout << "Bad entry , val=" << hex
+									<< agame.board[orow][col].val << endl;
+							agame.print(SYMBOLMODE4);
 							redo = 1;
 						}
 						cout << "fans=" << fans << " row=" << row << " col="
@@ -376,8 +380,6 @@ int main() {
 					agame.maxDepth = depth;
 					row = reverseMapping(row);
 					agame.setCell(isX(gameCh), row, col, E_NEAR);
-					agame.terminate = 0;
-					agame.evalCnt = 0;
 					agame.my_AI_Play = isNotX(gameCh);
 					agame.trace.clear();
 					bool debugThis = false;
@@ -392,7 +394,7 @@ int main() {
 
 					do {
 						redonext = false;
-						agame.scorecnt = agame.skipcnt = 0;
+						agame.localCnt = 0;
 						result = agame.evalAllCell(isNotX(gameCh), width, depth,
 								maximizingPlayer,
 								NINF, INF, debugThis, redonext, nullptr,
