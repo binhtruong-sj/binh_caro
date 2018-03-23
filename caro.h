@@ -8,7 +8,7 @@
 #include <algorithm>
 #ifndef CARO_H_
 #define CARO_H_
-
+//#define ROWCOL 1
 #define SEast 7
 #define South 6
 #define SWest 5
@@ -161,15 +161,22 @@ public:
 			result = (bestValue() > other.bestValue());
 		} else if (deltaCost > 0) {
 			int v = bestValue();
-			while (deltaCost-- > 0) {
-				v = (v * COSTADJUSTPERCENT) / 100;
-			}
+			/*
+			 while (deltaCost-- > 0) {
+			 v = (v * COSTADJUSTPERCENT) / 100;
+			 }
+			 */
+			v = v >> deltaCost;
+
 			result = (v > other.bestValue());
 		} else {
 			int v = other.bestValue();
-			while (deltaCost++ < 0) {
-				v = (v * COSTADJUSTPERCENT) / 100;
-			}
+			v = v >> -deltaCost;
+			/*
+			 while (deltaCost++ < 0) {
+			 v = (v * COSTADJUSTPERCENT) / 100;
+			 }
+			 */
 			result = (bestValue() > v);
 		}
 		//cout << "result=" << result << endl;
@@ -210,8 +217,8 @@ public:
 		if (score != other.score) {
 			cout << "score diff";
 			rtnval = false;
-
 		}
+
 		if (connected != other.connected) {
 			cout << "connected diff";
 			rtnval = false;
@@ -239,7 +246,7 @@ public:
 		}
 		return rtnval;
 	}
-	int evaluate(bool ownPlay, bool ending);
+	int evaluate(bool ending);
 	void print() {
 		char binary[9];
 		toBinary(val, binary);
@@ -352,7 +359,7 @@ public:
 			pval = score.myScore + score.oppScore;
 			break;
 		case SCOREMODEm + 1: // -
-			pval = score.myScore - score.oppScore;
+			pval = abs(score.connectedOrCost);
 			break;
 		case POSSMOVEMODE: {
 			char ach = (char) convertCellToStr(val);
@@ -729,12 +736,20 @@ public:
 		tracer *tv = &v;
 		cout << "TrC: ";
 		do {
-			cout << tv->atDepth << tv->savePoint << "->";
-		} while ((tv = tv->next));
+			if (tv) {
+				cout << tv->atDepth << tv->savePoint << "->";
+				tv = tv->next;
+			} else
+				break;
+		} while (1);
 		cout << endl;
 		tv = &v;
-		while ((tv = tv->prev)) {
-			cout << tv->atDepth << tv->savePoint << "<-";
+		while (1) {
+			if (tv) {
+				cout << tv->atDepth << tv->savePoint << "<-";
+				tv = tv->prev;
+			} else
+				break;
 		}
 		return out;
 	}
@@ -1064,73 +1079,6 @@ public:
 			printf("%2C ", pchar);
 		cout << endl;
 	}
-	unsigned setCellCnt = 0;
-#define InspectDistance 4
-#define saveRestoreDist InspectDistance+8 //  ---X---
-	/*
-	 * set a cell to X or O
-	 */
-	int lastRow1, lastCol1;
-	int lastRow2, lastCol2;
-	cell * setCell(int setVal, int row, int col, int near) {
-		if ((board[row][col].val & (X_ | O_)) == 0) { // this check is bc of lazyness of setting up board
-			if (near == E_NEAR) { // Only real set can be UNDO
-				// code to handle undo
-				moveCnt++;
-				lastMoveIndex = (lastMoveIndex + 1) & 0xFF; // wrap around -- circular
-				saveLast2p = lastMoveIndex;
-				movesHist[lastMoveIndex] = &board[row][col];
-				movesHistVal[lastMoveIndex] = board[row][col].val;
-				board[row][col].score = {moveCnt,0};
-			} else {
-				localCnt++;
-				board[row][col].score = {moveCnt+localCnt,0};
-			}
-			board[row][col].val = setVal;
-			if (near != E_FAR) {
-				setNEAR(row, col, near);
-			}
-		}
-		return &board[row][col];
-	}
-
-	/*
-	 * After temporary setting a Cell to X' or O' for scoring, now return it and its neighbor to prev values
-	 */
-	int restoreCell(int saveVal, int row, int col) {
-		//	cell *currCell;
-		rowCol crCurrCell,crDir;
-		int rval;
-		localCnt--;
-		for (int dir = East; dir <= SEast; dir++) {
-			crDir.setDirection(dir);
-			//	currCell = &board[row][col];
-			crCurrCell.setv(row,col);
-			for (int i = 0; i < InspectDistance; i++) {
-				do {
-					//currCell = currCell->near_ptr[dir];
-					crCurrCell.moveToDir(crDir);
-					//rval = currCell->val & (X_ | O_);
-					rval = cellVal(crCurrCell) & (X_ | O_);
-					if (rval)
-					i = 0;
-				}while ((rval != 3) && rval);
-				/*
-				 currCell->val = currCell->val & ~(E_CAL);
-				 if (currCell->val & (E_TNEAR)) {
-				 currCell->val = E_FAR; // only clear the cell with E_TNEAR (temporary NEAR) to FAR
-				 */
-				cellVal(crCurrCell) = cellVal(crCurrCell) & ~(E_CAL);
-				if (cellVal(crCurrCell) & (E_TNEAR)) {
-					cellVal(crCurrCell) = E_FAR; // only clear the cell with E_TNEAR (temporary NEAR) to FAR
-				} else if (rval == 3) // boundary
-				break;
-			}
-		}
-		rval = board[row][col].val;
-		board[row][col].val = saveVal & ~(E_CAL); // Return the val to prev
-		return rval;
-	}
 
 	void undo1move() {
 		cout << "Undo p=" << lastMoveIndex << "moveCnt=" << moveCnt << endl;
@@ -1164,36 +1112,91 @@ public:
 	}
 	void reCalBoard(int currVal, int depth) {
 		for (int row = 1; row < size; row++)
-		for (int col = 1; col < size; col++) {
-			if ((board[row][col].val & (O_ | X_)) == 0)
-			score1Cell(currVal, row, col, false);
+			for (int col = 1; col < size; col++) {
+				if ((board[row][col].val & (O_ | X_)) == 0)
+					score1Cell(currVal, row, col, false);
+			}
+	}
+
+	unsigned setCellCnt = 0;
+#define InspectDistance 4
+#define saveRestoreDist InspectDistance+8 //  ---X---
+	/*
+	 * set a cell to X or O
+	 */
+	int lastRow1, lastCol1;
+	int lastRow2, lastCol2;
+	cell * setCell(int setVal, int row, int col, int near) {
+		if ((board[row][col].val & (X_ | O_)) == 0) { // this check is bc of lazyness of setting up board
+			if (near == E_NEAR) { // Only real set can be UNDO
+				// code to handle undo
+				moveCnt++;
+				lastMoveIndex = (lastMoveIndex + 1) & 0xFF; // wrap around -- circular
+				saveLast2p = lastMoveIndex;
+				movesHist[lastMoveIndex] = &board[row][col];
+				movesHistVal[lastMoveIndex] = board[row][col].val;
+				board[row][col].score = {moveCnt,0};
+			} else {
+				localCnt++;
+				board[row][col].score = {moveCnt+localCnt,0};
+			}
+			board[row][col].val = setVal;
+			if (near != E_FAR) {
+				setNEAR(row, col, near);
+			}
 		}
+		return &board[row][col];
+	}
+
+	/*
+	 * After temporary setting a Cell to X' or O' for scoring, now return it and its neighbor to prev values
+	 */
+
+#ifdef ROWCOL
+	int restoreCell(int saveVal, int row, int col) {
+		rowCol crCurrCell,crDir;
+		int rval;
+		localCnt--;
+		for (int dir = East; dir <= SEast; dir++) {
+			crDir.setDirection(dir);
+			crCurrCell.setv(row,col);
+			for (int i = 0; i < InspectDistance; i++) {
+				do {
+					crCurrCell.moveToDir(crDir);
+					rval = cellVal(crCurrCell) & (X_ | O_);
+					if (rval)
+					i = 0;
+				}while ((rval != 3) && rval);
+
+				cellVal(crCurrCell) = cellVal(crCurrCell) & ~(E_CAL);
+				if (cellVal(crCurrCell) & (E_TNEAR)) {
+					cellVal(crCurrCell) = E_FAR; // only clear the cell with E_TNEAR (temporary NEAR) to FAR
+				} else if (rval == 3) // boundary
+				break;
+			}
+		}
+		rval = board[row][col].val;
+		board[row][col].val = saveVal & ~(E_CAL); // Return the val to prev
+		return rval;
 	}
 
 	/*
 	 * Temporary near marking set when traverse further ahead
 	 */
 	void setNEAR(int row, int col, int near) {
-		//cell *currCell;
 		rowCol crCurrCell,crDir;
 		int rval;
 		for (int dir = East; dir <= SEast; dir++) {
-			//currCell = &board[row][col];
 			crCurrCell.setv(row,col);
 			crDir.setDirection(dir);
 			for (int i = 0; i < InspectDistance; i++) {
 				do {
-					//currCell = currCell->near_ptr[dir];
 					crCurrCell.moveToDir(crDir);
-					//	rval = currCell->val & (X_ | O_);
 					rval = cellVal(crCurrCell) & (X_ | O_);
 					if (rval)
 					i = 0;
 				}while ((rval != 3) && rval);
-				//currCell->val = currCell->val & ~(E_CAL);
 				cellVal(crCurrCell) = cellVal(crCurrCell) & ~(E_CAL);
-				//if (currCell->val == 0)
-				//currCell->val = near;
 				if(cellVal(crCurrCell)==0) {
 					cellVal(crCurrCell) = near;
 				}
@@ -1207,6 +1210,107 @@ public:
 	 */
 	void saveScoreVal(int row, int col, aScore saveScoreArray[8][saveRestoreDist],
 			aScore & s1Score, int saveValArray[8][saveRestoreDist], int & s1Val) {
+		rowCol crCurrCell;
+		rowCol crDir;
+		int rval;
+		s1Score = board[row][col].score;
+		s1Val = board[row][col].val;
+		for (int dir = East; dir <= SEast; dir++) {
+			crCurrCell.setv(row,col);
+			crDir.setDirection(dir);
+			int j = 0;
+			for (int i = 0; i < InspectDistance; i++) {
+				do {
+					crCurrCell.moveToDir(crDir);
+					rval = cellVal(crCurrCell) & (X_ | O_);
+					if (rval)
+					i = 0;
+				}while ((rval != 3) && rval);
+				saveScoreArray[dir][j] = cellScore(crCurrCell);
+				saveValArray[dir][j++] = cellVal(crCurrCell);
+				if (rval == 3) // boundary
+				break;
+			}
+		}
+	}
+	void restoreScoreVal(int row, int col,
+			aScore saveScoreArray[8][saveRestoreDist], aScore & s1Score,
+			int saveValArray[8][saveRestoreDist], int & s1Val) {
+		//cell *currCell;
+		rowCol crCurrCell;
+		rowCol crDir;
+
+		int rval;
+		board[row][col].score = s1Score;
+		board[row][col].val = s1Val;
+		for (int dir = East; dir <= SEast; dir++) {
+			crCurrCell.setv(row,col);
+			crDir.setDirection(dir);
+			int j = 0;
+			for (int i = 0; i < InspectDistance; i++) {
+				do {
+					crCurrCell.moveToDir(crDir);
+					rval = cellVal(crCurrCell) & (X_ | O_);
+					if (rval)
+					i = 0;
+				}while ((rval != 3) && rval);
+				cellScore(crCurrCell) = saveScoreArray[dir][j];
+				cellVal(crCurrCell) = saveValArray[dir][j++];
+				if (rval == 3) // boundary
+				break;
+			}
+		}
+	}
+#else
+	int restoreCell(int saveVal, int row, int col) {
+		cell *currCell;
+		int rval;
+		localCnt--;
+		for (int dir = East; dir <= SEast; dir++) {
+			currCell = &board[row][col];
+			for (int i = 0; i < InspectDistance; i++) {
+				do {
+					currCell = currCell->near_ptr[dir];
+					rval = currCell->val & (X_ | O_);
+					if (rval)
+					i = 0;
+				}while ((rval != 3) && rval);
+				currCell->val = currCell->val & ~(E_CAL);
+				if (currCell->val & (E_TNEAR)) {
+					currCell->val = E_FAR; // only clear the cell with E_TNEAR (temporary NEAR) to FAR
+
+				} else if (rval == 3) // boundary
+				break;
+			}
+		}
+		rval = board[row][col].val;
+		board[row][col].val = saveVal & ~(E_CAL); // Return the val to prev
+		return rval;
+	}
+
+	void setNEAR(int row, int col, int near) {
+		cell *currCell;
+		int rval;
+		for (int dir = East; dir <= SEast; dir++) {
+			currCell = &board[row][col];
+			for (int i = 0; i < InspectDistance; i++) {
+				do {
+					currCell = currCell->near_ptr[dir];
+					rval = currCell->val & (X_ | O_);
+					if (rval)
+					i = 0;
+				}while ((rval != 3) && rval);
+				currCell->val = currCell->val & ~(E_CAL);
+				if (currCell->val == 0)
+				currCell->val = near;
+				if (rval == 3) // boundary
+				break;
+			}
+		}
+	}
+	void saveScoreVal(int row, int col,
+			aScore saveScoreArray[8][saveRestoreDist], aScore & s1Score,
+			int saveValArray[8][saveRestoreDist], int & s1Val) {
 		cell *currCell;
 		int rval;
 		s1Score = board[row][col].score;
@@ -1231,36 +1335,28 @@ public:
 	void restoreScoreVal(int row, int col,
 			aScore saveScoreArray[8][saveRestoreDist], aScore & s1Score,
 			int saveValArray[8][saveRestoreDist], int & s1Val) {
-		//cell *currCell;
-		rowCol crCurrCell;
-		rowCol crDir;
-
+		cell *currCell;
 		int rval;
 		board[row][col].score = s1Score;
 		board[row][col].val = s1Val;
 		for (int dir = East; dir <= SEast; dir++) {
-			//currCell = &board[row][col];
-			crCurrCell.setv(row,col);
-			crDir.setDirection(dir);
+			currCell = &board[row][col];
 			int j = 0;
 			for (int i = 0; i < InspectDistance; i++) {
 				do {
-				//	currCell = currCell->near_ptr[dir];
-					crCurrCell.moveToDir(crDir);
-					//rval = currCell->val & (X_ | O_);
-					rval = cellVal(crCurrCell) & (X_ | O_);
+					currCell = currCell->near_ptr[dir];
+					rval = currCell->val & (X_ | O_);
 					if (rval)
 					i = 0;
 				}while ((rval != 3) && rval);
-				//currCell->score = saveScoreArray[dir][j];
-				//currCell->val = saveValArray[dir][j++];
-				cellScore(crCurrCell)  = saveScoreArray[dir][j];
-				cellVal(crCurrCell) = saveValArray[dir][j++];
+				currCell->score = saveScoreArray[dir][j];
+				currCell->val = saveValArray[dir][j++];
 				if (rval == 3) // boundary
 				break;
 			}
 		}
 	}
+#endif
 
 	class traceCell {
 	public:
@@ -1313,8 +1409,7 @@ public:
 		}while (invalid);
 	}
 	void clearScore();
-	Line copyLine(int inVal, int dir, int x, int y, bool &ending, bool debugThis);
-	Line extractLine(int inVal, int dir, int x, int y, bool &ending,
+	Line extractLine( int dir, int x, int y, bool &ending,
 			bool debugThis);
 	aScore score1Cell(const int setVal, const int row, const int col,
 			bool debugThis);

@@ -144,7 +144,195 @@ void caro::clearScore() {
  * in hand.  So, this will need to change depend on the method
  * ONGOING CODING -- NOT DONE
  */
-Line caro::copyLine(int currPlay, int dir, int row, int col, bool &ending,
+#ifdef ROWCOL
+Line caro::extractLine(int dir, int in_row, int in_col, bool &ending,
+		bool debugThis) {
+	Line aline;
+	int bitcnt = 0;
+	aline.val = 0;
+	aline.cnt = 0;
+	int unconnected = 0;
+	ending = false;
+	// first scan for 1 set, bound by oposite or upto 8 total, bound by 3 spaces or 1 opposite
+	// then scan for these special case X?xX?X, X?XxX?X
+	int val, oppval;
+	rowCol crDir;
+	rowCol in(in_row, in_col);
+	rowCol crCurrCell(in_row, in_col);
+	rowCol crOriCell = crCurrCell;
+	rowCol crBackoffCell;
+// reverse the row to match up with old scheme
+	crDir.setDirection(dir);
+	val = cellVal(in);
+	bool debugLine = debugThis
+	&& (debugScoringAll || debugScoring
+			|| cdbg.ifMatch(&board[in_row][in_col], -1, 1));
+	oppval = oppositeVal(val);
+	//debugLine = true;
+
+	crCurrCell = in;
+
+	// Scan for O_ (assuming X_ turn)
+
+	aline.blocked = 0;
+	bool isVal = false;
+	aline.type = val;
+	int freeEnd = 0;
+	if (debugLine) {
+		cout << "Dir=" << dir << " aiPlay=" << my_AI_Play << " val=" << val;
+		cout << endl << board[in_row][in_col] << " --> ";
+	}
+	int spaced = 0;
+	isVal = false;
+	for (int i = 0; i < SEARCH_DISTANCE; i++) {
+		if (cellVal(crCurrCell)&oppval
+		) {
+			if (isVal & (cellVal(crCurrCell) == oppval))
+			aline.blocked = 1;
+			break;
+		} else if (cellVal(crCurrCell) == val) {
+			crBackoffCell = crCurrCell;
+		} else {
+			if (spaced++ > 1) {
+				freeEnd++;
+				break;
+			}
+		}
+		isVal = cellVal(crCurrCell)== val;
+		crCurrCell.moveToDir(crDir);
+	}
+	//prompt("hit Enter q");
+	if (aline.blocked || (spaced > 2)) {
+		crCurrCell = crBackoffCell;
+	} else {
+		// Did not find O_, switch back to ori and scan in reverse
+		crCurrCell = crOriCell;
+		crDir.reverse();
+		if (debugLine) {
+			cout << endl << board[in_row][in_col] << " <-- ";
+		}
+		int spaced = 0;
+		isVal = false;
+		for (int i = 0; i < SEARCH_DISTANCE; i++) {
+			if (cellVal(crCurrCell)&oppval
+			) {
+				if (isVal & (cellVal(crCurrCell) == oppval))
+				aline.blocked = 1;
+				break;
+			} else if (cellVal(crCurrCell) == val) {
+				crBackoffCell = crCurrCell;
+			} else {
+				if (spaced++ > 1) {
+					freeEnd++;
+					break;
+				}
+			}
+			isVal = cellVal(crCurrCell)== val;
+			crCurrCell.moveToDir(crDir);
+		}
+		//	prompt("hit Enter q2");
+
+		crCurrCell = crBackoffCell;
+	}
+
+	// Now reverse direction
+	crDir.reverse();
+
+	aline.val = 0;
+	aline.connected = 0;
+	aline.offset = 0;
+	int save = 0;
+	if (debugLine) {
+		cout << endl << board[in_row][in_col] << " --> ";
+	}
+	int prev_unconnected = 0;
+	int continuous = 0;
+	aline.continuous = 0;
+	ending = false;
+	for (int i = 0; i < (SEARCH_DISTANCE); i++) {
+		aline.val = aline.val << 1;
+		aline.cnt++;
+		isVal = cellVal(crCurrCell)== val;
+		if (cellVal(crCurrCell)== val) {
+			if ((unconnected == 1)) { // double check this
+				if (aline.continuous < 4) {
+					continuous = aline.continuous;
+					; // take just 1 bubble for less than 4, dont want XXXX_X
+					aline.continuous = 0;
+				}
+				aline.connected = save + 1;
+				//	if (aline.connected < 3)
+				prev_unconnected++;
+			} else
+			aline.connected++;
+			continuous++;
+			if ((continuous >= 5) && (prev_unconnected == 0))//&& (val == currPlay))
+			ending = true;// need to correct true ending on upper level, where u know about
+						  //current Play, i.e. block-abled or game over
+			bitcnt++;
+			aline.val = aline.val | 0x1;
+			unconnected = 0;
+		} else {
+			if (aline.continuous == 0)
+			aline.continuous = continuous;
+			continuous = 0;
+			if (aline.connected > save)
+			save = aline.connected;
+			aline.connected = 0;
+			if (unconnected++ > 2)
+			break;
+		}
+		crCurrCell.moveToDir(crDir);
+		if (cellVal(crCurrCell)&oppval) {
+			if (isVal & (cellVal(crCurrCell) == oppval))
+			aline.blocked++;
+			break;
+		}
+	}
+	if (prev_unconnected > 1)
+	aline.continuous--;
+
+	if (aline.continuous == 0)
+	aline.continuous = continuous;
+	aline.cnt += freeEnd * 2;
+
+	if (save > aline.connected)
+	aline.connected = save;
+	/*
+	 if ((aline.connected > 2) && (prev_unconnected >= 1)) {
+	 aline.connected -= prev_unconnected - 1;
+	 }
+	 */
+	if (aline.connected == 1)
+	aline.connected = 0;
+	if (aline.cnt > 8)
+	aline.cnt = 8;
+	if (aline.cnt < 5)
+	aline.connected = 0;
+	if (aline.connected < 4) {
+		aline.offset -= prev_unconnected;
+	}
+	aline.connected = (aline.connected * 2);
+
+	if (aline.blocked) {
+		if (aline.connected <= 8)
+		aline.offset -= 2;
+	}
+	if ((val == my_AI_Play) && (aline.connected >= 6)) // Favor offensive
+	aline.offset++;
+
+	/*
+	 if ((val == aiPlay) && (aline.connected > 0))
+	 aline.connected--; // go first, assume that opponent to block  (1 less)
+	 */
+	if (debugLine) {
+		cout << endl;
+		cout << aline;
+	}
+	return aline;
+}
+#else
+Line caro::extractLine(int dir, int row, int col, bool &ending,
 		bool debugThis) {
 	Line aline;
 	int bitcnt = 0;
@@ -239,7 +427,7 @@ Line caro::copyLine(int currPlay, int dir, int row, int col, bool &ending,
 	if (debugLine) {
 		cout << endl << board[row][col] << " --> ";
 	}
-	int marked = 0;
+	int prev_unconnected = 0;
 	int continuous = 0;
 	aline.continuous = 0;
 	ending = false;
@@ -250,20 +438,23 @@ Line caro::copyLine(int currPlay, int dir, int row, int col, bool &ending,
 		aline.cnt++;
 		prevVal = currCell->val == val;
 		if (currCell->val == val) {
+			if ((unconnected == 1)) { // double check this
+				if (aline.continuous < 4) {
+					continuous = aline.continuous;
+					; // take just 1 bubble for less than 4, dont want XXXX_X
+					aline.continuous = 0;
+				}
+				aline.connected = save + 1;
+				//	if (aline.connected < 3)
+				prev_unconnected++;
+			} else
+				aline.connected++;
 			continuous++;
-			if ((continuous >= 5))	//&& (val == currPlay))
+			if ((continuous >= 5) && (prev_unconnected == 0))//&& (val == currPlay))
 				ending = true; // need to correct true ending on upper level, where u know about
 							   //current Play, i.e. block-abled or game over
 			bitcnt++;
 			aline.val = aline.val | 0x1;
-			if ((unconnected == 1)) { // double check this
-				if (aline.continuous < 4)
-					aline.continuous++; // take just 1 bubble for less than 4, dont want XXXX_X
-				aline.connected = save + 1;
-				if (aline.connected < 3)
-					marked++;
-			} else
-				aline.connected++;
 			unconnected = 0;
 		} else {
 			if (aline.continuous == 0)
@@ -282,7 +473,7 @@ Line caro::copyLine(int currPlay, int dir, int row, int col, bool &ending,
 			break;
 		}
 	}
-	if (marked > 1)
+	if (prev_unconnected > 1)
 		aline.continuous--;
 
 	if (aline.continuous == 0)
@@ -292,8 +483,8 @@ Line caro::copyLine(int currPlay, int dir, int row, int col, bool &ending,
 	if (save > aline.connected)
 		aline.connected = save;
 	/*
-	 if ((aline.connected > 2) && (marked >= 1)) {
-	 aline.connected -= marked - 1;
+	 if ((aline.connected > 2) && (prev_unconnected >= 1)) {
+	 aline.connected -= prev_unconnected - 1;
 	 }
 	 */
 	if (aline.connected == 1)
@@ -303,7 +494,7 @@ Line caro::copyLine(int currPlay, int dir, int row, int col, bool &ending,
 	if (aline.cnt < 5)
 		aline.connected = 0;
 	if (aline.connected < 4) {
-		aline.offset -= marked;
+		aline.offset -= prev_unconnected;
 	}
 	aline.connected = (aline.connected * 2);
 
@@ -324,202 +515,8 @@ Line caro::copyLine(int currPlay, int dir, int row, int col, bool &ending,
 	}
 	return aline;
 }
-
-Line caro::extractLine(int currPlay, int dir, int in_row, int in_col, bool &ending,
-		bool debugThis) {
-	Line aline;
-	int bitcnt = 0;
-	aline.val = 0;
-	aline.cnt = 0;
-	int unconnected = 0;
-	ending = false;
-	// first scan for 1 set, bound by oposite or upto 8 total, bound by 3 spaces or 1 opposite
-	// then scan for these special case X?xX?X, X?XxX?X
-	int val, oppval;
-	rowCol crDir;
-	rowCol in(in_row, in_col);
-	rowCol crCurrCell(in_row, in_col);
-	rowCol crOriCell = crCurrCell;
-	rowCol crBackoffCell;
-// reverse the row to match up with old scheme
-	crDir.setDirection(dir);
-	val = cellVal(in);
-	bool debugLine = debugThis
-			&& (debugScoringAll || debugScoring
-					|| cdbg.ifMatch(&board[in_row][in_col], -1, 1));
-	oppval = oppositeVal(val);
-	//debugLine = true;
-	/*
-	 cell *currCell = &board[in_row][in_col];
-	 cell *oriCell = currCell;
-	 cell *backoffCell;	//, *lastone;
-	 */
-
-	crCurrCell = in;
-
-	// Scan for O_ (assuming X_ turn)
-
-	aline.blocked = 0;
-	bool isVal = false;
-	aline.type = val;
-	int freeEnd = 0;
-	if (debugLine) {
-		cout << "Dir=" << dir << " aiPlay=" << my_AI_Play << " val=" << val;
-		cout << endl << board[in_row][in_col] << " --> ";
-	}
-//	lastone = currCell;
-	int spaced = 0;
-	isVal = false;
-	for (int i = 0; i < SEARCH_DISTANCE; i++) {
-		if (cellVal(crCurrCell)&oppval
-		) {
-			if (isVal & (cellVal(crCurrCell) == oppval))
-			aline.blocked = 1;
-			break;
-		} else if (cellVal(crCurrCell) == val) {
-			//backoffCell = currCell;
-			crBackoffCell = crCurrCell;
-		} else {
-			if (spaced++ > 1) {
-				freeEnd++;
-				break;
-			}
-		}
-		isVal = cellVal(crCurrCell)== val;
-		crCurrCell.moveToDir(crDir);
-		//	currCell = currCell->near_ptr[dir];
-	}
-	//prompt("hit Enter q");
-	if (aline.blocked || (spaced > 2)) {
-		//currCell = backoffCell;
-		crCurrCell = crBackoffCell;
-	} else {
-		// Did not find O_, switch back to ori and scan in reverse
-		//	currCell = oriCell;
-		crCurrCell = crOriCell;
-		crDir.reverse();
-		if (debugLine) {
-			cout << endl << board[in_row][in_col] << " <-- ";
-		}
-		int spaced = 0;
-		isVal = false;
-		for (int i = 0; i < SEARCH_DISTANCE; i++) {
-			if (cellVal(crCurrCell)&oppval
-			) {
-				if (isVal & (cellVal(crCurrCell) == oppval))
-				aline.blocked = 1;
-				break;
-			} else if (cellVal(crCurrCell) == val) {
-				crBackoffCell = crCurrCell;
-			} else {
-				if (spaced++ > 1) {
-					freeEnd++;
-					break;
-				}
-			}
-			isVal = cellVal(crCurrCell)== val;
-			crCurrCell.moveToDir(crDir);
-		}
-		//	prompt("hit Enter q2");
-
-		crCurrCell = crBackoffCell;
-	}
-
-	// Now reverse direction
-	crDir.reverse();
-
-	aline.val = 0;
-	aline.connected = 0;
-	aline.offset = 0;
-	int save = 0;
-	if (debugLine) {
-		cout << endl << board[in_row][in_col] << " --> ";
-	}
-	int marked = 0;
-	int continuous = 0;
-	aline.continuous = 0;
-	ending = false;
-	for (int i = 0; i < (SEARCH_DISTANCE); i++) {
-		aline.val = aline.val << 1;
-		aline.cnt++;
-		isVal = cellVal(crCurrCell)== val;
-		if (cellVal(crCurrCell)== val) {
-			continuous++;
-			if ((continuous >= 5))	//&& (val == currPlay))
-			ending = true;// need to correct true ending on upper level, where u know about
-						  //current Play, i.e. block-abled or game over
-			bitcnt++;
-			aline.val = aline.val | 0x1;
-			if ((unconnected == 1)) { // double check this
-				if (aline.continuous < 4)
-				aline.continuous++;// take just 1 bubble for less than 4, dont want XXXX_X
-				aline.connected = save + 1;
-				if (aline.connected < 3)
-				marked++;
-			} else
-			aline.connected++;
-			unconnected = 0;
-		} else {
-			if (aline.continuous == 0)
-			aline.continuous = continuous;
-			continuous = 0;
-			if (aline.connected > save)
-			save = aline.connected;
-			aline.connected = 0;
-			if (unconnected++ > 2)
-			break;
-		}
-		crCurrCell.moveToDir(crDir);
-		if (cellVal(crCurrCell)&oppval) {
-			if (isVal & (cellVal(crCurrCell) == oppval))
-			aline.blocked++;
-			break;
-		}
-	}
-	if (marked > 1)
-		aline.continuous--;
-
-	if (aline.continuous == 0)
-		aline.continuous = continuous;
-	aline.cnt += freeEnd * 2;
-
-	if (save > aline.connected)
-		aline.connected = save;
-	/*
-	 if ((aline.connected > 2) && (marked >= 1)) {
-	 aline.connected -= marked - 1;
-	 }
-	 */
-	if (aline.connected == 1)
-		aline.connected = 0;
-	if (aline.cnt > 8)
-		aline.cnt = 8;
-	if (aline.cnt < 5)
-		aline.connected = 0;
-	if (aline.connected < 4) {
-		aline.offset -= marked;
-	}
-	aline.connected = (aline.connected * 2);
-
-	if (aline.blocked) {
-		if (aline.connected <= 8)
-			aline.offset -= 2;
-	}
-	if ((val == my_AI_Play) && (aline.connected >= 6)) // Favor offensive
-		aline.offset++;
-
-	/*
-	 if ((val == aiPlay) && (aline.connected > 0))
-	 aline.connected--; // go first, assume that opponent to block  (1 less)
-	 */
-	if (debugLine) {
-		cout << endl;
-		cout << aline;
-	}
-	return aline;
-}
-
-int Line::evaluate(bool ownPlay, bool ending) {
+#endif
+int Line::evaluate(bool ending) {
 // rudimentary scoring -- need to change to hybrid table lookup + fallback rudimentary (that
 // self learning)
 	score = 0;
@@ -583,18 +580,19 @@ aScore caro::score1Cell(const int currPlay, const int row, const int col,
 			setCell(curVal, row, col, E_FAR);
 			Line compareLine;
 			for (int dir = East; dir < West; dir++) {
-				astar.Xlines[dir] = extractLine(currPlay, dir, row, col, ending,
+				astar.Xlines[dir] = extractLine(dir, row, col, ending,
 						debugThis);
-				compareLine = copyLine(currPlay, dir, row, col, ending,
-						debugThis);
-				if(!(astar.Xlines[dir]== compareLine)) {
-					cout << "HALT"  << endl;
-					char ach;
-					cin >> ach;
-				}
-				points tscore = astar.Xlines[dir].evaluate((currPlay == curVal),
-						ending);
+				points tscore = astar.Xlines[dir].evaluate(ending);
+				/*
+				 compareLine = copyLine(dir, row, col, ending, debugThis);
+				 compareLine.evaluate(ending);
 
+				 if (!(compareLine == astar.Xlines[dir])) {
+				 cout << "Found DIFF" << ends;
+				 char ach;
+				 cin >> ach;
+				 }
+				 */
 				if (astar.Xlines[dir].connected >= (6 * 2)) {
 					ill_6 = 1;
 				} else if (astar.Xlines[dir].blocked == 0) {
@@ -745,6 +743,7 @@ void caro::modifyDebugFeatures(int debugId) {
 		break;
 	case -98:
 		cout << "Turn " << FLIP(docheck) << " docheck" << endl;
+		break;
 	case -99:
 		cout << "Turn " << FLIP(interactiveDebug) << " interactiveDebug"
 				<< endl;
@@ -791,6 +790,8 @@ void caro::modifyDebugFeatures(int debugId) {
  *
  *
  */
+auto start = high_resolution_clock::now();
+
 scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 		int min_depth, bool isMax, aScore alpha, aScore beta, bool debugThis,
 		bool &redo, traceCell * callerTrace, tracer *headTracer) {
@@ -872,7 +873,8 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 			}
 		}
 	}
-
+	rsum_chk_max = MAX(abs(highestConnected), rsum_chk_max);
+	rsum_chk_min = MIN(abs(highestConnected), rsum_chk_min);
 	if (0) {
 		print(SYMBOLMODE2);
 		print(SCOREMODE);
@@ -888,8 +890,10 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 				break;
 		}
 		possMove[i] = nullptr;
-		print(SYMBOLMODE2);
+		print(SCOREMODEm);
 		print(possMove);
+		print(SYMBOLMODE);
+
 		return bestScore;
 	} else if (terminated) {
 		bestScore = previousMovePoints;
@@ -905,8 +909,7 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 
 	} else {
 // SORT picking the best move. NOT bestValue
-		rsum_chk_max = MAX(highestConnected, rsum_chk_max);
-		rsum_chk_min = MIN(highestConnected, rsum_chk_min);
+
 		sort(bestScoreArray.begin(), bestScoreArray.end(), betterMove);
 		thisWidth = MIN(in_width, (int )bestScoreArray.size()); // size of bestScoreArray can be smaller than "width"
 		// prunning -- necessary to remove bad moves
@@ -1052,7 +1055,10 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 			bestScore = dbestValue();
 			vector <tracer *>tracerArrayPtr(thisWidth);
 			for (int i = 0; i < thisWidth; i++) {
-				if(terminated) break;
+				if(terminated) {
+					cout << "Terminated" << endl;
+					break;
+				}
 				cPtr = bestScoreArray[i].cellPtr;
 				tracerArrayPtr[i] = new tracer(&board[cPtr->rowVal][ cPtr->colVal]);
 				tracerArrayPtr[i]->prev = headTracer;
@@ -1084,34 +1090,45 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 				do {
 					bool debugNext = false;
 					debugNext = debug.find(i);
-					auto start = high_resolution_clock::now();
-					int new_depth = min_depth-adjustDepth;
-					if(0&&(in_depth == maxDepth)) {
+					if(in_depth == maxDepth) {
+						start = high_resolution_clock::now();
+					}
+					int new_depth = min_depth+adjustDepth;
+					if((in_depth == maxDepth)) {
 						cout << "New depth =" << new_depth << " Adjust=" << adjustDepth << endl;
 					}
 					returnScore = evalAllCell(nextPlay, nextLevelWidth, in_depth - 1,
 							new_depth,
 							!isMax, alpha, beta, debugNext, redoNext,
 							&currTrace, tracerArrayPtr[i]);
-					if(in_depth == maxDepth) {
-						auto stop = high_resolution_clock::now();
-						auto duration = duration_cast<microseconds>(stop - start);
-						int ratio = (duration.count()*10 / desiredRuntime);
-						int save_adjustDepth = adjustDepth;
-						auto tduration = duration_cast<microseconds>(stop - topLevelStart);
-						tooLong = tduration.count() > ((desiredRuntime * (in_width-1))/in_width);
+					auto stop = high_resolution_clock::now();
+					auto duration = duration_cast<microseconds>(stop - start);
+					if(debugThis==0) {
+						if(in_depth == maxDepth) {
 
-						if(ratio <=10) {
-							adjustDepth += ratio/2;
-						} else if(ratio > 100) {
-							adjustDepth -= ratio/400;
+							int ratio = (duration.count()*5 / desiredRuntime);
+							int save_adjustDepth = adjustDepth;
+							auto tduration = duration_cast<microseconds>(stop - topLevelStart);
+							tooLong = tduration.count() > runtimeInMicroSecond;
+							if(tooLong)
+							cout << " Total exe time too long, i =" << i << " out of " << thisWidth << endl;
+							if(ratio <=20) { // quick execution time
+								adjustDepth --;// increase run time by reducing min_depth, take care not to increase too fast
+							} else if(ratio > 80) { // Long
+								adjustDepth += MIN(2,ratio/40);// reduce runtime
+							}
+							if(abs(adjustDepth) > 10) {
+								adjustDepth = save_adjustDepth;
+							}
+							if((adjustDepth+min_depth) > in_depth)
+							adjustDepth = in_depth - min_depth -2;
+							cout << " ratio =" << ratio;
+						} else {
+							tooLong = duration.count() > desiredRuntime*64;
+							if(tooLong)
+							cout << "leaf exe time too long="<<duration.count() << " at depth =" << in_depth << endl;
+							adjustDepth = 0;
 						}
-						if(abs(adjustDepth) > 10) {
-							adjustDepth = save_adjustDepth;
-						}
-						if((adjustDepth+min_depth) > in_depth)
-						adjustDepth = in_depth - min_depth -2;
-						cout << " ratio =" << ratio;
 					} else {
 						adjustDepth = 0;
 					}
@@ -1163,10 +1180,8 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 				if(debugScoring||debugThis) {
 					if ((alpha.greaterValueThan(beta))) {
 						// quit if setVal's score is MAGIC
-						printDebugInfo(cPtr->rowVal, cPtr->colVal,&currTrace, in_depth);
 						hist histArray;
-						currTrace.extractTohistArray(histArray);
-
+						tracerArrayPtr[i]->extractTohistArray(currPlay, histArray);
 						print(histArray);
 						cout << "ALPHA=" << alpha << " BETA=" << beta << " TERMINATE" << endl;
 					}
@@ -1195,8 +1210,10 @@ scoreElement caro::evalAllCell(int currPlay, int in_width, int in_depth,
 					oneShot = false;
 
 				}
-				if(tooLong)
-				break;
+				if(tooLong && (debugThis==0)) {
+					cout << "break";
+					break;
+				}
 			}
 
 			if (debugThis) {
@@ -1311,7 +1328,7 @@ void hashTable::print() {
 	printf("%4s %8s %8s %8s %8s %8s %8s", "no", "Line", "connected", "bitcnt",
 			"score", "RefCnt", "Binary");
 	cout << endl;
-	for (int i; i < arrayE_cnt; i++) {
+	for (int i = 0; i < arrayE_cnt; i++) {
 		char binary[9];
 		int val = arrayE[i].line;
 		toBinary(val, binary);

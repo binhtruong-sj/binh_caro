@@ -44,21 +44,25 @@ void getInput(FILE *finput, caro *agame) {
 	row = 1000;
 	do {
 		fgets(aline, 80, finput);
+		cout << aline;
 		cptr = aline;
 		col = 0;
 		while (char achar = *cptr++) {
-			if (achar != ' ') {
+			if ((achar != ' ') && (achar != '<') && (achar != '>')	&& !(isdigit(achar))) {
 				if ((row > 30) && (achar == 'b')) {
 					row = 0;
 					col = 0;
 					break;
 				} else if ((achar == 'L') || (achar == 'A')) {
+					if(row == 1000)
+						break;
 					row = -100; // quit
 					break;
 				} else if (achar == 'b') {
 					if (col > 1) {
 						break;
 					} else {
+						row++;
 						col = 0;
 					}
 				} else if (achar == 'X') {
@@ -67,9 +71,10 @@ void getInput(FILE *finput, caro *agame) {
 					agame->setCell(O_, row, col, E_NEAR);
 				}
 				col++;
+				cout << "Row=" << row << "col=" << col << endl;
 			}
 		}
-	} while (++row > 0);
+	} while (row >= 0);
 	fgets(aline, 80, finput);
 	cout << endl;
 	agame->clearScore();
@@ -77,8 +82,8 @@ void getInput(FILE *finput, caro *agame) {
 }
 
 int main() {
-	int setWidthDepth[][2] = { { 14, 8 }, { 14, 8 }, { 5, 10 }, { 4, 10 }, { 4,
-			10 } };
+	int setWidthDepth[][2] = { { 20, 7 }, { 20, 7 }, { 10, 13 }, { 8, 16 }, { 8,
+			16 } };
 	caro agame(15);
 	int row, col, mode, dir;
 	char name[4], testType[20];
@@ -141,8 +146,7 @@ int main() {
 					agame.setCell(isX(testType[0]), row, col, E_NEAR);
 					agame.print(SYMBOLMODE);
 
-					tempLine = agame.extractLine(X_, dir, row, col, ending,
-							true);
+					tempLine = agame.extractLine(dir, row, col, ending, true);
 					tempLine.print();
 					agame.restoreCell(0, row, col);
 
@@ -151,16 +155,15 @@ int main() {
 			case '4': {
 				FourLines astar;
 				for (int dir = 0; dir < 4; dir++) {
-					astar.Xlines[dir] = agame.extractLine(X_, dir, row, col,
-							ending, true);
+					astar.Xlines[dir] = agame.extractLine(dir, row, col, ending,
+							true);
 				}
 				astar.print();
 				break;
 			}
 			case 's': {
-				Line tempLine = agame.extractLine(X_, dir, row, col, ending,
-						true);
-				tempLine.evaluate(true, ending);
+				Line tempLine = agame.extractLine(dir, row, col, ending, true);
+				tempLine.evaluate(ending);
 				tempLine.print();
 			}
 				break;
@@ -189,11 +192,11 @@ int main() {
 				scoreElement result;
 				breadCrumb top_bc(depth);
 				if (testType[1] == 'X')
-					result = agame.evalAllCell(X_, width, depth,0,
+					result = agame.evalAllCell(X_, width, depth, 0,
 							!maximizingPlayer, NINF, INF, false, redonext,
 							nullptr, &aTracer); // width = dir; depth = row
 				else
-					result = agame.evalAllCell(O_, width, depth,0,
+					result = agame.evalAllCell(O_, width, depth, 0,
 							!maximizingPlayer, NINF, INF, false, redonext,
 							nullptr, &aTracer);
 				printf("Score=%x, row=%d, col=%C", result.myScore,
@@ -214,6 +217,7 @@ int main() {
 				agame.reset();
 				width = search_width;
 				depth = search_depth;
+				break;
 
 			case 'g':
 				cout << "Opponent is White==O,  Black==X ;";
@@ -222,15 +226,35 @@ int main() {
 				cin >> gameCh;
 				if (gameCh == 'O') {
 					agame.setCell(isNotX(gameCh), 8, 8, E_NEAR);
-					agame.evalAllCell(isNotX(gameCh), 20, -1,0, maximizingPlayer,
-					NINF, INF, false, redonext, nullptr, &aTracer);
+					agame.evalAllCell(isNotX(gameCh), 20, -1, 0,
+							maximizingPlayer,
+							NINF, INF, false, redonext, nullptr, &aTracer);
 				}
+
 				while (col < 20) {
 					int redo = 1;
 					char fans[10], ccol;
-
+					float elapse = 2.0;
 					do {
+						agame.rsum_chk_max = 0;
+						agame.rsum_chk_min = 10;
+						agame.evalAllCell(isNotX(gameCh), 20, -1, 0,
+								maximizingPlayer,
+								NINF, INF, 0, redonext, nullptr, &aTracer);
+						//agame.print(SYMBOLMODE);
 
+						int avg_chk = (agame.rsum_chk_max + agame.rsum_chk_min
+								+ 1) / 2;
+						width = setWidthDepth[avg_chk][0];
+						int ndepth = setWidthDepth[avg_chk][1];
+						if ((ndepth <= depth) && (elapse < 2.0)) {
+							depth++;
+						} else {
+							depth = ndepth;
+						}
+						printf("max=%d, min=%d",agame.rsum_chk_max ,agame.rsum_chk_min);
+						cout << "Avg chk = " << avg_chk << " depth=" << depth
+								<< " Width=" << width << endl;
 						cout << "Enter row col" << endl;
 						cout
 								<< "-1 undo -2 redo -3 debugScoring, -4 debugBestPath,"
@@ -351,33 +375,35 @@ int main() {
 							}
 						} else
 							redo = 0;
-						int orow ;
 						if (fans[0] == '?')
 							help();
-						if ((ccol == '=')) {
-							cell* aptr = agame.possMove[row-1]; // -1 to not use zero
-							col = aptr->colVal;
-							orow = aptr->rowVal;
-							row = mapping(orow);
-							cout << *aptr;
-							printf(" AT possMove  row=%d col=%d\n", row, col);
-						} else {
-							col = ccol - 'a' + 1;
-						}
-						if ((row > 15) || (col > 15)
-								|| (agame.board[orow][col].val & (X_ | O_))) {
-							cout << "Bad entry , val=" << hex
-									<< agame.board[orow][col].val << endl;
-							agame.print(SYMBOLMODE4);
-							redo = 1;
-						}
-						cout << "fans=" << fans << " row=" << row << " col="
-								<< col << endl;
-					} while (redo);
 
+					} while (redo);
+					int orow;
+
+					if ((ccol == '=')) {
+						cell* aptr = agame.possMove[row - 1]; // -1 to not use zero
+						col = aptr->colVal;
+						orow = aptr->rowVal;
+						row = mapping(orow);
+						cout << *aptr;
+						printf(" AT possMove  row=%d col=%d\n", row, col);
+					} else {
+						col = ccol - 'a' + 1;
+						orow = mapping(row);
+					}
+					if ((row > 15) || (col > 15)
+							|| (agame.board[orow][col].val & (X_ | O_))) {
+						cout << "Bad entry , val=" << hex
+								<< agame.board[orow][col].val << endl;
+						agame.print(SYMBOLMODE4);
+						redo = 1;
+					}
+					cout << "fans=" << fans << " row=" << row << " col=" << col
+							<< endl;
 					agame.my_AI_Play = O_;
 					scoreElement result;
-					agame.maxDepth = depth+10;
+					agame.maxDepth = depth + 10;
 					int minDepth = 0;
 					row = reverseMapping(row);
 					agame.setCell(isX(gameCh), row, col, E_NEAR);
@@ -388,16 +414,15 @@ int main() {
 						debugThis = true;
 					}
 					agame.print(SYMBOLMODE);
-					agame.rsum_chk_max = 0;
-					agame.rsum_chk_min = 10;
+
 					// Get starting timepoint
 					auto start = high_resolution_clock::now();
 
 					do {
 						redonext = false;
 						agame.localCnt = 0;
-						result = agame.evalAllCell(isNotX(gameCh), width, depth+10,minDepth+10,
-								maximizingPlayer,
+						result = agame.evalAllCell(isNotX(gameCh), width,
+								depth + 10, minDepth + 10, maximizingPlayer,
 								NINF, INF, debugThis, redonext, nullptr,
 								&aTracer);
 						if (redonext)
@@ -411,19 +436,10 @@ int main() {
 					// get durarion. To cast it to proper unit
 					// use duration cast method
 					auto duration = duration_cast<microseconds>(stop - start);
-					float elapse = ((float) duration.count() / 1000000.0);
-
-					int avg_chk = (agame.rsum_chk_max + agame.rsum_chk_min + 1)
-							/ 2;
-					width = setWidthDepth[avg_chk][0];
-					int ndepth = setWidthDepth[avg_chk][1];
-					if ((ndepth <= depth) && (elapse < 2.0)) {
-						depth++;
-					} else {
-						depth = ndepth;
-					}
-					cout << "Avg chk = " << avg_chk << " depth=" << depth
-							<< " Width=" << width << endl;
+					elapse = ((float) duration.count() / 1000000.0);
+					cout << "Result =" << result << "  ";
+					cout << "Time taken by function: " << elapse << " seconds"
+							<< " at depth =" << depth << endl;
 					char ans[10];
 					ans[0] = 'y';
 					if (ans[0] == 'y') {
@@ -442,13 +458,6 @@ int main() {
 						agame.setCell((int) (isNotX(gameCh)), row, col, E_NEAR);
 					}
 					//ahash.print();
-					result = agame.evalAllCell(isNotX(gameCh), 20, -1, 0,
-							maximizingPlayer,
-							NINF, INF, debugThis, redonext, nullptr, &aTracer);
-					//agame.print(SYMBOLMODE);
-					cout << "Result =" << result << "  ";
-					cout << "Time taken by function: " << elapse << " seconds"
-							<< " at depth =" << depth << endl;
 
 				}
 				agame.reset();
