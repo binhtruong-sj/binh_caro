@@ -8,7 +8,7 @@
 #include <algorithm>
 #ifndef CARO_H_
 #define CARO_H_
-//#define ROWCOL 1
+#define ROWCOL 1
 #define SEast 7
 #define South 6
 #define SWest 5
@@ -26,6 +26,7 @@
 #define isO_(a) a==O_
 
 #define E_NEAR 0x10    // Empty cell, but close to other occupied cells
+#define E_FNEAR 0x11    // Empty cell, but close to other occupied cells
 #define E_TNEAR 0x20    // for temporary Near, clear after move is made
 #define E_CAL 0x100
 #define E_LAST 0x8000
@@ -414,15 +415,20 @@ public:
 			vector<scoreElement> &values) {
 		for (auto const& value : values) {
 			output << *value.cellPtr << value.myScore << "," << value.oppScore
-					<< "," << dec << value.connectedOrCost << endl;
+					<< "," << dec << value.connectedOrCost << "=" << dec
+					<< value.myScore - value.oppScore << dec << endl;
 		}
 		return output;
 
 	}
 	friend ostream & operator <<(ostream &out, scoreElement &c) {
-		out << *c.cellPtr;
-		out << hex << (c.myScore) << "," << hex << (c.oppScore) << "," << dec
-				<< c.connectedOrCost << " ";
+		if (c.cellPtr) {
+			out << *c.cellPtr;
+			out << hex << (c.myScore) << "," << hex << (c.oppScore) << ","
+					<< dec << c.connectedOrCost << "=" << dec
+					<< c.myScore - c.oppScore << dec << " ";
+		} else
+			cout << "NULL";
 		return out;
 	}
 	scoreElement & operator=(const scoreElement & other) {
@@ -475,6 +481,14 @@ public:
 	cell *hArray[100];
 	int size;
 	int gameCh;
+	friend ostream & operator <<(ostream &out, const hist&c) {
+		for (int i = 0; i < c.size; i++) {
+			out << *c.hArray[i] << "->";
+		}
+		out << endl;
+		return out;
+	}
+
 	int locate(int row, int col) {
 		for (int i = 0; i < size; i++) {
 			if ((row == hArray[i]->rowVal) && (col == hArray[i]->colVal))
@@ -723,13 +737,13 @@ public:
 	~tracer() {
 		// tracer is a link list. When delete, need to check if it point to a link list
 		// if so, need to delete the entire link list
-		tracer *tptr, *toDel;
-		tptr = next;
-		toDel = tptr;
-		if (tptr) {
-			tptr = tptr->next;
+		tracer *toDel;
+		toDel = next; // save the next ptr before deleteSelf.
+		//	cout << savePoint << endl;
+		next = nullptr;
+		prev = nullptr;
+		if (toDel) {
 			delete toDel;
-			toDel = tptr;
 		}
 	}
 	friend ostream & operator <<(ostream & out, tracer & v) {
@@ -753,10 +767,11 @@ public:
 		}
 		return out;
 	}
-	void extractTohistArray(int val, hist & histArray) {
+	void extractTohistArray(int val, cell * cptr, hist & histArray) {
 		int j = 0;
 		tracer *tracerPtr;
 		histArray.gameCh = val;
+		histArray.hArray[j++] = cptr;
 		histArray.hArray[j++] = savePoint.cellPtr;
 		tracerPtr = next;
 		while (1) {
@@ -885,7 +900,40 @@ public:
 	 }
 	 */
 };
-class caro {
+class moveHist {
+public:
+	cell * movesHist[256]; // fixed at 256, change to use remeainder if different setting
+	int movesHistVal[256];
+	int lastMoveIndex = 0;
+	int saveLast2p;
+	int moveCnt = 0;
+	void addMove(cell *b) {
+		moveCnt++;
+		lastMoveIndex = (lastMoveIndex + 1) & 0xFF; // wrap around -- circular
+		saveLast2p = lastMoveIndex;
+		movesHist[lastMoveIndex] = b;
+		movesHistVal[lastMoveIndex] = b->val;
+	}
+	void addMove(int mvNum, cell *b) {
+		int lm = mvNum;
+		movesHist[lm] = b;
+		movesHistVal[lm] = b->val;
+		lastMoveIndex = moveCnt; // this is to force the entry .. only work if all the restore are done
+		saveLast2p = moveCnt;
+	}
+	void extractTohistArray(int currVal, hist & histArray) {
+		histArray.gameCh = currVal;
+		int i = moveCnt;
+		while (i) {
+			histArray.hArray[i - 1] = movesHist[lastMoveIndex - (moveCnt - i)];
+			cout << *histArray.hArray[i - 1] << " ";
+			i--;
+		}
+		histArray.size = moveCnt;
+	}
+}
+;
+class caro: public moveHist {
 public:
 	caroDebug cdebug;
 	vector<unsigned char> trace;
@@ -899,13 +947,10 @@ public:
 	int size = 17;
 	int maxDepth = 50;
 	int my_AI_Play = X_;
-	cell * movesHist[256]; // fixed at 256, change to use remeainder if different setting
-	int movesHistVal[256];
-	int lastMoveIndex = 0;
+
 	int saveLast2p;
-	int moveCnt = 0, localCnt = 0;
-	int rsum_chk_max = 0;
-	int rsum_chk_min = 0;
+	int localCnt = 0;
+	int desiredRuntime = 0;
 	cell* possMove[50];
 	caro(int table_size) {
 		size = table_size + 1;
@@ -1014,12 +1059,18 @@ public:
 	}
 
 	void print(hist &histArray) {
-		int v = histArray.gameCh;
+		int v, vb;
 		for (int row = 0; row <= size; row++) {
 			for (int col = 0; col <= size; col++) {
 				int lh = histArray.locate(row, col);
-				v = (lh % 2) ? oppositeVal(histArray.gameCh) : histArray.gameCh;
+				vb = board[row][col].val;
+				if (vb & (X_ | O_))
+					v = vb;
+				else
+					v = (lh % 2) ?
+							oppositeVal(histArray.gameCh) : histArray.gameCh;
 				board[row][col].print(v, lh);
+
 			}
 			cout << " ROW " << dec << mapping(row) << endl;
 			cout << endl;
@@ -1110,7 +1161,7 @@ public:
 			lastMoveIndex = (lastMoveIndex + 2) & 0xff;
 		}
 	}
-	void reCalBoard(int currVal, int depth) {
+	void reCalBoard(int currVal) {
 		for (int row = 1; row < size; row++)
 			for (int col = 1; col < size; col++) {
 				if ((board[row][col].val & (O_ | X_)) == 0)
@@ -1130,19 +1181,19 @@ public:
 		if ((board[row][col].val & (X_ | O_)) == 0) { // this check is bc of lazyness of setting up board
 			if (near == E_NEAR) { // Only real set can be UNDO
 				// code to handle undo
-				moveCnt++;
-				lastMoveIndex = (lastMoveIndex + 1) & 0xFF; // wrap around -- circular
-				saveLast2p = lastMoveIndex;
-				movesHist[lastMoveIndex] = &board[row][col];
-				movesHistVal[lastMoveIndex] = board[row][col].val;
+				addMove(&board[row][col]);
 				board[row][col].score = {moveCnt,0};
-			} else {
+			} else if (near == E_FNEAR) { // Only real set can be UNDO
+				moveCnt++;
+				board[row][col].score = {moveCnt,0};
+			}
+			else {
 				localCnt++;
 				board[row][col].score = {moveCnt+localCnt,0};
 			}
 			board[row][col].val = setVal;
 			if (near != E_FAR) {
-				setNEAR(row, col, near);
+				setNEAR(row, col, near & 0xF0);
 			}
 		}
 		return &board[row][col];
@@ -1425,6 +1476,13 @@ public:
 		return (nw);
 	}
 	void reset();
+
+private:
+	int createNodeList(int thisWidth, int in_width, std::vector<scoreElement>& bestScoreArray,
+			int& highestConnected, scoreElement& bestScore);
+	int debugSetup(int thisWidth, int in_depth, int currPlay, bool topLevel, bool debugThis,
+			int terminated, std::vector<scoreElement>& bestScoreArray, debugid& debug,
+			std::vector<scoreElement>& returnScoreArray);
 }
 ;
 

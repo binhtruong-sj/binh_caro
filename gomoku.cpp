@@ -44,17 +44,17 @@ void getInput(FILE *finput, caro *agame) {
 	row = 1000;
 	do {
 		fgets(aline, 80, finput);
-		cout << aline;
+		//	cout << aline;
 		cptr = aline;
 		col = 0;
 		while (char achar = *cptr++) {
-			if ((achar != ' ') && (achar != '<') && (achar != '>')	&& !(isdigit(achar))) {
+			if ((achar != ' ') && (achar != '<') && (achar != '>')) {
 				if ((row > 30) && (achar == 'b')) {
 					row = 0;
 					col = 0;
 					break;
 				} else if ((achar == 'L') || (achar == 'A')) {
-					if(row == 1000)
+					if (row == 1000)
 						break;
 					row = -100; // quit
 					break;
@@ -66,24 +66,34 @@ void getInput(FILE *finput, caro *agame) {
 						col = 0;
 					}
 				} else if (achar == 'X') {
-					agame->setCell(X_, row, col, E_NEAR);
+					agame->setCell(X_, row, col, E_FNEAR);
 				} else if (achar == 'O') {
-					agame->setCell(O_, row, col, E_NEAR);
+					agame->setCell(O_, row, col, E_FNEAR);
+				} else if (isdigit(achar)) {
+					cptr--;
+					int num;
+					char c;
+					sscanf(cptr, "%d%c", &num, &c);
+					while (*cptr++ != ' ')
+						;
+					cptr -= 2;
+					agame->addMove(num, &agame->board[row][col]);
+					col--;
 				}
 				col++;
-				cout << "Row=" << row << "col=" << col << endl;
 			}
 		}
 	} while (row >= 0);
 	fgets(aline, 80, finput);
 	cout << endl;
 	agame->clearScore();
-	agame->print(SYMBOLMODE);
+	hist histArray;
+	agame->extractTohistArray(X_, histArray);
+	agame->print(histArray);
 }
 
 int main() {
-	int setWidthDepth[][2] = { { 20, 7 }, { 20, 7 }, { 10, 13 }, { 8, 16 }, { 8,
-			16 } };
+
 	caro agame(15);
 	int row, col, mode, dir;
 	char name[4], testType[20];
@@ -93,8 +103,10 @@ int main() {
 	int depth = 5;
 	extern int search_depth, search_width;
 	extern int debugScoring, debugScoringd, debugScoringAll, debugHash, docheck;
-	extern int interactiveDebug;
+	extern int underDebug, lowerMin, higherMin;
+	extern int interactiveDebug, moreDepth;
 	bool redonext = false;
+	float elapse = 0.0;
 
 	bool maximizingPlayer = true;
 	extern hashTable ahash;
@@ -102,6 +114,7 @@ int main() {
 	aTracer.prev = nullptr;
 	aTracer.savePoint.cellPtr = &agame.board[1][1];
 	aTracer.savePoint = {0,0,0};
+	scoreElement result;
 
 	//agame.print();
 #if 1
@@ -189,7 +202,6 @@ int main() {
 				agame.print(SYMBOLMODE);
 				int width = dir;
 				int depth = row;
-				scoreElement result;
 				breadCrumb top_bc(depth);
 				if (testType[1] == 'X')
 					result = agame.evalAllCell(X_, width, depth, 0,
@@ -234,30 +246,19 @@ int main() {
 				while (col < 20) {
 					int redo = 1;
 					char fans[10], ccol;
-					float elapse = 2.0;
 					do {
-						agame.rsum_chk_max = 0;
-						agame.rsum_chk_min = 10;
 						agame.evalAllCell(isNotX(gameCh), 20, -1, 0,
 								maximizingPlayer,
 								NINF, INF, 0, redonext, nullptr, &aTracer);
-						//agame.print(SYMBOLMODE);
+						cout << "Result =" << result << "  ";
+						cout << "Time taken by function: " << elapse << " seconds" << endl;
 
-						int avg_chk = (agame.rsum_chk_max + agame.rsum_chk_min
-								+ 1) / 2;
-						width = setWidthDepth[avg_chk][0];
-						int ndepth = setWidthDepth[avg_chk][1];
-						if ((ndepth <= depth) && (elapse < 2.0)) {
-							depth++;
-						} else {
-							depth = ndepth;
-						}
-						printf("max=%d, min=%d",agame.rsum_chk_max ,agame.rsum_chk_min);
-						cout << "Avg chk = " << avg_chk << " depth=" << depth
-								<< " Width=" << width << endl;
 						cout << "Enter row col" << endl;
 						cout
-								<< "-1 undo -2 redo -3 debugScoring, -4 debugBestPath,"
+								<< "-1 undo -2 redo -3 debugScoring, -4 ("<< underDebug << ") underDebug (turn off all Time limit logic),"
+								<< "-5 (" <<lowerMin <<") lowerMin "
+								<< "-6 ("<< higherMin <<")  higherMin "
+								<< "-7 (" <<moreDepth << ") moreDepth "
 								<< "-5 debugBestPath -6 debugAllPaths, -7 debugAI, "
 								<< "-10 TRACE-debug -11 cells , "
 								<< "-12 reset debug, -13 save -23 debugScoringd -24 debugScoringAll"
@@ -353,6 +354,27 @@ int main() {
 										<< " debugScoring" << endl;
 
 								break;
+							case -4:
+								cout << "Turn " << FLIP(underDebug)
+										<< " underDebug" << endl;
+
+								break;
+							case -5:
+								cout << "Turn " << FLIP(lowerMin) << " lowerMin"
+										<< endl;
+
+								break;
+
+							case -6:
+								cout << "Turn " << FLIP(higherMin)
+										<< " higherMin" << endl;
+
+								break;
+							case -7:
+								cout << "Turn " << FLIP(moreDepth)
+										<< " moreDepth" << endl;
+
+								break;
 							case -98:
 								cout << "Turn " << FLIP(docheck) << " docheck"
 										<< endl;
@@ -402,9 +424,8 @@ int main() {
 					cout << "fans=" << fans << " row=" << row << " col=" << col
 							<< endl;
 					agame.my_AI_Play = O_;
-					scoreElement result;
-					agame.maxDepth = depth + 10;
-					int minDepth = 0;
+					agame.maxDepth = 24;
+
 					row = reverseMapping(row);
 					agame.setCell(isX(gameCh), row, col, E_NEAR);
 					agame.my_AI_Play = isNotX(gameCh);
@@ -421,25 +442,28 @@ int main() {
 					do {
 						redonext = false;
 						agame.localCnt = 0;
-						result = agame.evalAllCell(isNotX(gameCh), width,
-								depth + 10, minDepth + 10, maximizingPlayer,
+						result = agame.evalAllCell(isNotX(gameCh), 10,
+								agame.maxDepth, agame.maxDepth - 10,
+								maximizingPlayer,
 								NINF, INF, debugThis, redonext, nullptr,
 								&aTracer);
+						aTracer.savePoint = result;
 						if (redonext)
 							delete aTracer.next;
 					} while (redonext);
+					cout << "History" << endl;
+					hist histArray;
+					agame.extractTohistArray(isNotX(gameCh), histArray);
+					cout << histArray;
+					agame.print(histArray);
+					cout << *aTracer.next;
 					delete aTracer.next;
 					// Get ending timepoint
 					auto stop = high_resolution_clock::now();
-
-					// Get duration. Substart timepoints to
-					// get durarion. To cast it to proper unit
-					// use duration cast method
 					auto duration = duration_cast<microseconds>(stop - start);
 					elapse = ((float) duration.count() / 1000000.0);
 					cout << "Result =" << result << "  ";
-					cout << "Time taken by function: " << elapse << " seconds"
-							<< " at depth =" << depth << endl;
+					cout << "Time taken by function: " << elapse << " seconds" << endl;
 					char ans[10];
 					ans[0] = 'y';
 					if (ans[0] == 'y') {
