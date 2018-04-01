@@ -107,15 +107,6 @@ tScore::tScore(scoreElement a) {
 }
 
 hashTable ahash;
-tsDebug::tsDebug() {
-	for (int i = 0; i < 40; i++) {
-		for (int j = 0; j < 40; j++) {
-			Array[i][j].myScore = Array[i][j].oppScore = 0;
-			Array[i][j].ts_ret = {0,0};
-			Array[i][j].cellPtr = nullptr;
-		}
-	}
-}
 
 void caro::reset() {
 	moveCnt = 0;
@@ -600,7 +591,7 @@ aScore caro::score1Cell(const int currPlay, const int row, const int col,
 				 cin >> ach;
 				 }
 				 */
-				if (astar.Xlines[dir].continuous >= (6 )) {
+				if (astar.Xlines[dir].continuous >= (6)) {
 					ill_6 = 1;
 				} else if (astar.Xlines[dir].blocked == 0) {
 					if (astar.Xlines[dir].connected == (3 * 2)) {
@@ -638,10 +629,10 @@ aScore caro::score1Cell(const int currPlay, const int row, const int col,
 					rtn.connectedOrCost = chk;
 				if ((debugThis && (debugCell || debugScoring))) {
 					cout << "CurrPlay=" << currPlay << " "
-							<< convertToChar(curVal) << "_ dir=" << dir << " ctnuos="
-							<< astar.Xlines[dir].continuous << " connected="
-							<< astar.Xlines[dir].connected << " blk="
-							<< astar.Xlines[dir].blocked << " cnt="
+							<< convertToChar(curVal) << "_ dir=" << dir
+							<< " ctnuos=" << astar.Xlines[dir].continuous
+							<< " connected=" << astar.Xlines[dir].connected
+							<< " blk=" << astar.Xlines[dir].blocked << " cnt="
 							<< astar.Xlines[dir].cnt << "-chk" << chk
 							<< "-rtn.c" << rtn.connectedOrCost << "-end"
 							<< ending << "-score=" << scores[j] << "," << tscore
@@ -951,7 +942,7 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 	traceCell currTrace;
 	currTrace.prev = callerTrace;
 	currTrace.cell = nullptr;
-debugCell = false;
+	debugCell = false;
 	aScore previousMovePoints;
 
 	if (debugThis) {
@@ -1017,8 +1008,8 @@ debugCell = false;
 				} else if (bestScore.oppScore >= MAGICNUMBER) {
 					if (!(isMyPlay(currPlay))) {
 						termScore = bestScore;
-						previousMovePoints.myScore =
-								previousMovePoints.myScore >> 1;
+						previousMovePoints.myScore = previousMovePoints.myScore
+								>> 1;
 						terminated = 1;
 						if (debugThis)
 							cout << "Human-win=" << bestScore;
@@ -1057,7 +1048,7 @@ debugCell = false;
 	} else if (terminated) {
 		bestScore = previousMovePoints;
 
-		if ( 0 && (debugScoring || debugThis)) {
+		if (0 && (debugScoring || debugThis)) {
 			printDebugInfo(termScore.cellPtr->rowVal, termScore.cellPtr->colVal,
 					&currTrace, in_depth);
 			printf("nextPlay=%c, aiPlay=%c ", convertToChar(currPlay),

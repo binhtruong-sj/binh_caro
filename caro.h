@@ -485,35 +485,6 @@ public:
 	}
 };
 
-class tsDebug {
-public:
-	tScore Array[40][40];
-	int enablePrinting = 0;
-	int printCnt = 0;
-	int debugWidthAtDepth[MAXDEPTH];
-	int debugBreakAtDepth = -1; // not breaking
-// indicating the depth to take a break if follow
-// the path of debugWidthAtDepth array
-
-	int bestWidthAtDepth[MAXDEPTH];
-	int lowDepth = 0;
-	tsDebug();
-
-	void print(int maxdepth, int widthAtDepth[], int bestWidthAtDepth[]) {
-		for (int d = maxdepth; d >= lowDepth; d--) {
-			cout << "Depth " << d << " Width=" << widthAtDepth[d] << " Best W:"
-					<< bestWidthAtDepth[d];
-			for (int w = 0; w < widthAtDepth[d]; w++) {
-				if (w % 2 == 0)
-					printf("\n");
-				cout << "\t<" << d << "," << w << ">";
-				cout << *Array[d][w].cellPtr;
-				cout << "=$" << Array[d][w] << ",ret" << Array[d][w].ts_ret;
-			}
-			cout << endl;
-		}
-	}
-};
 class acrumb: public cellV {
 public:
 	int width_id, depth_id;
@@ -739,7 +710,7 @@ public:
 		cout << "TrC: ";
 		do {
 			if (tv) {
-				cout << tv->atDepth << tv->savePoint << "->" ;
+				cout << tv->atDepth << tv->savePoint << "->";
 				tv = tv->next;
 			} else
 				break;
@@ -1000,7 +971,7 @@ public:
 		return *this;
 	}
 
-	caro & save( caro & other) {
+	caro & save(caro & other) {
 		for (int row = 0; row <= size; row++) {
 			for (int col = 0; col <= size; col++) {
 				other.board[row][col] = board[row][col];
@@ -1487,86 +1458,98 @@ private:
 ;
 
 class briefHist {
-	unsigned char bHist[90][4];
-	int startCnt = 0;
-	char gameVal;
+	unsigned char *row, *col, *val, *order;
+	int size = 2;
 public:
 
 	briefHist() {
-		bHist[0][0] = 0xFF;
-		gameVal = 0;
+		size = 80;
+		row = new unsigned char[size + 1];
+		col = new unsigned char[size];
+		val = new unsigned char[size];
+		order = new unsigned char[size];
+		row[0] = 0xff;
+	}
+	briefHist(int size) {
+		row = new unsigned char[size + 1];
+		col = new unsigned char[size];
+		val = new unsigned char[size];
+		order = new unsigned char[size];
+		row[0] = 0xff;
+	}
+	~ briefHist() {
+		delete row;
+		delete col;
+		delete order;
+		delete val;
 	}
 	briefHist & operator =(const hist & c) {
-		startCnt = 0;
 		int i;
 		for (i = 0; i < c.size; i++) {
-			bHist[i][0] = (char) (c.hArray[i]->rowVal);
-			bHist[i][1] = (char) (c.hArray[i]->colVal);
-			bHist[i][2] = (char) c.hArray[i]->val;
-			bHist[i][3] = (char) i;
+			row[i] = (char) (c.hArray[i]->rowVal);
+			col[i] = (char) (c.hArray[i]->colVal);
+			val[i] = (char) c.hArray[i]->val;
+			order[i] = (char) i;
 		}
-		bHist[i][0] = 0xFF;
-		gameVal = c.gameCh;
+		row[i] = 0xFF;
 		return *this;
 	}
 
 	briefHist & operator =(const tracer & c) {
-		startCnt = 0;
 		int i = 0;
 		do {
-			bHist[i][0] = c.savePoint.cellPtr->rowVal;
-			bHist[i][1] = c.savePoint.cellPtr->colVal;
-			bHist[i][2] = (char) c.savePoint.cellPtr->val;
-			bHist[i][3] = (char) i;
+			row[i] = c.savePoint.cellPtr->rowVal;
+			col[i] = c.savePoint.cellPtr->colVal;
+			val[i] = (char) c.savePoint.cellPtr->val;
+			order[i] = (char) i;
 			i++;
 		} while (c.prev);
-		bHist[i][0] = 0xFF;
+		row[i] = 0xFF;
 
 		return *this;
 	}
 
 	friend ostream & operator <<(ostream &out, const briefHist &c) {
 		int i = 0;
-		while (c.bHist[i][0] != 0xFF) {
-			out << (int) c.bHist[i][3] << "[" << (int) mapping(c.bHist[i][0])
-					<< (char) convertCharToCol(c.bHist[i][1]) << "]"
-					<< convertToChar(c.bHist[i][2]) << "->";
+		while (c.row[i] != 0xFF) {
+			out << (int) c.order[i] << "[" << (int) mapping(c.row[i])
+					<< (char) convertCharToCol(c.col[i]) << "]"
+					<< convertToChar(c.val[i]) << "->";
 			i++;
 		}
 		return out;
 	}
 
-	void addMove(int order, int row, int col, int val) {
-		startCnt++;
+	void addMove(int o, int r, int c, int v) {
 		int i = 0;
-		while (bHist[i++][0] != 0xFF)
+		while (row[i++] != 0xFF)
 			;
 		i--;
-		bHist[i][0] = row;
-		bHist[i][1] = col;
-		bHist[i][2] = val;
-		bHist[i++][3] = order;
-		bHist[i][0] = 0xFF;
+		row[i] = r;
+		col[i] = c;
+		val[i] = v;
+		order[i++] = o;
+		row[i] = 0xFF;
 	}
 
-	void setCell(caro & c) {
+	void setCell(caro & cr) {
 		int i = 0;
-		while (bHist[i][0] != 0xFF) {
-			int row = bHist[i][0];
-			int col = bHist[i][1];
-			int order = bHist[i][3];
-			c.addMove(order, &c.board[row][col]);
-			c.setCell(bHist[i][2], row, col, E_FNEAR);
+		while (row[i] != 0xFF) {
+			int r = row[i];
+			int c = col[i];
+			int o = order[i];
+			cr.addMove(o, &cr.board[r][c]);
+			cr.setCell(val[i], r, c, E_FNEAR);
 			i++;
 		}
 
 	}
-	void setCellwithNoOrder(caro & c) {
+	void setCellwithNoOrder(caro & cr) {
 		int i = 0;
-		while (bHist[i][0] != 0xFF) {
-			int row = bHist[i][0];
-			int col = bHist[i][1];
-			c.setCell(bHist[i][2], row, col, E_NEAR);
+		while (row[i] != 0xFF) {
+			int r = row[i];
+			int c = col[i];
+			cr.setCell(val[i], r, c, E_NEAR);
 			i++;
 		}
 
