@@ -72,7 +72,7 @@
 #define asMAX(a,b) (a.greaterValueThan(b)) ? a:b
 
 #define convertToChar(setVal) (setVal == X_ ? 'X' : 'O')
-#define convertToCol(col) ((char)(col-1+'a'))
+#define convertCharToCol(col) ((char)(col-1+'a'))
 #define convertCellToStr(val) (char) ((val == X_) ? 'X' : \
                               (val == O_) ? 'O' :\
 		                   (val == E_FAR) ? '.' :\
@@ -153,34 +153,21 @@ public:
 	int bestValue() {
 		return myScore - oppScore;
 	}
+
 	bool greaterValueThan(aScore &other) {
 		bool result;
 		int deltaCost = other.connectedOrCost - connectedOrCost;
-		//	deltaCost  = 0;
-		//	cout <<hex <<this <<  "bv=" << bestValue() << " o.bv=" <<other <<" " << other.bestValue() << endl;
 		if (deltaCost == 0) {
 			result = (bestValue() > other.bestValue());
 		} else if (deltaCost > 0) {
 			int v = bestValue();
-			/*
-			 while (deltaCost-- > 0) {
-			 v = (v * COSTADJUSTPERCENT) / 100;
-			 }
-			 */
 			v = v >> deltaCost;
-
 			result = (v > other.bestValue());
 		} else {
 			int v = other.bestValue();
 			v = v >> -deltaCost;
-			/*
-			 while (deltaCost++ < 0) {
-			 v = (v * COSTADJUSTPERCENT) / 100;
-			 }
-			 */
 			result = (bestValue() > v);
 		}
-		//cout << "result=" << result << endl;
 		return result;
 	}
 };
@@ -388,13 +375,13 @@ public:
 	}
 
 	void printid() {
-		printf("[%d%c]", mapping(rowVal), convertToCol(colVal));
+		printf("[%d%c]", mapping(rowVal), convertCharToCol(colVal));
 	}
 
 	friend ostream & operator <<(ostream &out, cell &c) {
 		out << "[" << dec
 				<< mapping(
-						c.rowVal) << convertToCol(c.colVal) << "]" << convertCellToStr(c.val);
+						c.rowVal) << convertCharToCol(c.colVal) << "]" << convertCellToStr(c.val);
 		return out;
 	}
 	cell & operator =(cell &c) {
@@ -497,6 +484,7 @@ public:
 		return (-1);
 	}
 };
+
 class tsDebug {
 public:
 	tScore Array[40][40];
@@ -751,7 +739,7 @@ public:
 		cout << "TrC: ";
 		do {
 			if (tv) {
-				cout << tv->atDepth << tv->savePoint << "->";
+				cout << tv->atDepth << tv->savePoint << "->" ;
 				tv = tv->next;
 			} else
 				break;
@@ -926,7 +914,6 @@ public:
 		int i = moveCnt;
 		while (i) {
 			histArray.hArray[i - 1] = movesHist[lastMoveIndex - (moveCnt - i)];
-			cout << *histArray.hArray[i - 1] << " ";
 			i--;
 		}
 		histArray.size = moveCnt;
@@ -944,6 +931,7 @@ public:
 		return trace.size();
 	}
 	cell board[21][21];
+
 	int size = 17;
 	int maxDepth = 50;
 	int my_AI_Play = X_;
@@ -1000,14 +988,26 @@ public:
 		return out;
 	}
 
-	void save(caro & other) {
+	caro & operator =(caro & other) {
+		size = other.size;
+		maxDepth = other.maxDepth;
+		my_AI_Play = other.my_AI_Play;
+		for (int row = 0; row <= size; row++) {
+			for (int col = 0; col <= size; col++) {
+				board[row][col] = other.board[row][col];
+			}
+		}
+		return *this;
+	}
+
+	caro & save( caro & other) {
 		for (int row = 0; row <= size; row++) {
 			for (int col = 0; col <= size; col++) {
 				other.board[row][col] = board[row][col];
 			}
 		}
+		return *this;
 	}
-
 	bool compare(caro & other) {
 		bool result;
 		for (int row = 0; row <= size; row++) {
@@ -1486,4 +1486,91 @@ private:
 }
 ;
 
+class briefHist {
+	unsigned char bHist[90][4];
+	int startCnt = 0;
+	char gameVal;
+public:
+
+	briefHist() {
+		bHist[0][0] = 0xFF;
+		gameVal = 0;
+	}
+	briefHist & operator =(const hist & c) {
+		startCnt = 0;
+		int i;
+		for (i = 0; i < c.size; i++) {
+			bHist[i][0] = (char) (c.hArray[i]->rowVal);
+			bHist[i][1] = (char) (c.hArray[i]->colVal);
+			bHist[i][2] = (char) c.hArray[i]->val;
+			bHist[i][3] = (char) i;
+		}
+		bHist[i][0] = 0xFF;
+		gameVal = c.gameCh;
+		return *this;
+	}
+
+	briefHist & operator =(const tracer & c) {
+		startCnt = 0;
+		int i = 0;
+		do {
+			bHist[i][0] = c.savePoint.cellPtr->rowVal;
+			bHist[i][1] = c.savePoint.cellPtr->colVal;
+			bHist[i][2] = (char) c.savePoint.cellPtr->val;
+			bHist[i][3] = (char) i;
+			i++;
+		} while (c.prev);
+		bHist[i][0] = 0xFF;
+
+		return *this;
+	}
+
+	friend ostream & operator <<(ostream &out, const briefHist &c) {
+		int i = 0;
+		while (c.bHist[i][0] != 0xFF) {
+			out << (int) c.bHist[i][3] << "[" << (int) mapping(c.bHist[i][0])
+					<< (char) convertCharToCol(c.bHist[i][1]) << "]"
+					<< convertToChar(c.bHist[i][2]) << "->";
+			i++;
+		}
+		return out;
+	}
+
+	void addMove(int order, int row, int col, int val) {
+		startCnt++;
+		int i = 0;
+		while (bHist[i++][0] != 0xFF)
+			;
+		i--;
+		bHist[i][0] = row;
+		bHist[i][1] = col;
+		bHist[i][2] = val;
+		bHist[i++][3] = order;
+		bHist[i][0] = 0xFF;
+	}
+
+	void setCell(caro & c) {
+		int i = 0;
+		while (bHist[i][0] != 0xFF) {
+			int row = bHist[i][0];
+			int col = bHist[i][1];
+			int order = bHist[i][3];
+			c.addMove(order, &c.board[row][col]);
+			c.setCell(bHist[i][2], row, col, E_FNEAR);
+			i++;
+		}
+
+	}
+	void setCellwithNoOrder(caro & c) {
+		int i = 0;
+		while (bHist[i][0] != 0xFF) {
+			int row = bHist[i][0];
+			int col = bHist[i][1];
+			c.setCell(bHist[i][2], row, col, E_NEAR);
+			i++;
+		}
+
+	}
+}
+;
 #endif /* CARO_H_ */

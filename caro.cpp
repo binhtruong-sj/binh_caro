@@ -10,6 +10,8 @@
 #include <algorithm>
 #include <cstring>
 #include <chrono>
+#include <thread>         // std::thread
+#include <mutex>          // std::mutex
 
 using namespace std;
 using namespace std::chrono;
@@ -77,11 +79,14 @@ int docheck = 0;
 int debugBestPath = 0;
 int debugHash = 0;
 int debugAI = 0;
-int debugAIbest = 0, moreDepth = 0;
+int debugAIbest = 0, moreDepth = 0, training = 0;
 int debugRow, debugCol;
 int interactiveDebug;
 int debugTrace = 0;
 int underDebug = 0, lowerMin = 0, higherMin = 0;
+int inspectCell;
+bool debugCell;
+unsigned char iC[2];
 bool oneShot = true;
 char globalInputStr[80];
 char *gisptr;
@@ -167,9 +172,7 @@ Line caro::extractLine(int dir, int in_row, int in_col, bool &ending,
 // reverse the row to match up with old scheme
 	crDir.setDirection(dir);
 	val = cellVal(in);
-	bool debugLine = debugThis
-			&& (debugScoringAll || debugScoring
-					|| cdbg.ifMatch(&board[in_row][in_col], -1, 1));
+
 	oppval = oppositeVal(val);
 	//debugLine = true;
 
@@ -182,7 +185,7 @@ Line caro::extractLine(int dir, int in_row, int in_col, bool &ending,
 	aline.type = val;
 	int freeEnd = 0;
 
-	if (debugLine) {
+	if (debugCell) {
 		cout << "Dir=" << dir << " aiPlay=" << my_AI_Play << " val=" << val;
 		cout << endl << board[in_row][in_col] << " --> ";
 	}
@@ -212,7 +215,7 @@ Line caro::extractLine(int dir, int in_row, int in_col, bool &ending,
 		// Did not find O_, switch back to ori and scan in reverse
 		crCurrCell = crOriCell;
 		crDir.reverse();
-		if (debugLine) {
+		if (debugCell) {
 			cout << endl << board[in_row][in_col] << " <-- ";
 		}
 		int spaced = 0;
@@ -246,7 +249,7 @@ Line caro::extractLine(int dir, int in_row, int in_col, bool &ending,
 	aline.connected = 0;
 	aline.offset = 0;
 	int save = 0;
-	if (debugLine) {
+	if (debugCell) {
 		cout << endl << board[in_row][in_col] << " --> ";
 	}
 	int prev_unconnected = 0;
@@ -322,14 +325,14 @@ Line caro::extractLine(int dir, int in_row, int in_col, bool &ending,
 		if (aline.connected <= 8)
 			aline.offset -= 2;
 	}
-	if ((val == my_AI_Play) && (aline.connected >= 6)) // Favor offensive
+	if ((val == my_AI_Play) && (aline.connected >= 6))
 		aline.offset++;
 
 	/*
 	 if ((val == aiPlay) && (aline.connected > 0))
 	 aline.connected--; // go first, assume that opponent to block  (1 less)
 	 */
-	if (debugLine) {
+	if (debugCell) {
 		cout << endl;
 		cout << aline;
 	}
@@ -597,7 +600,7 @@ aScore caro::score1Cell(const int currPlay, const int row, const int col,
 				 cin >> ach;
 				 }
 				 */
-				if (astar.Xlines[dir].connected >= (6 * 2)) {
+				if (astar.Xlines[dir].continuous >= (6 )) {
 					ill_6 = 1;
 				} else if (astar.Xlines[dir].blocked == 0) {
 					if (astar.Xlines[dir].connected == (3 * 2)) {
@@ -633,10 +636,11 @@ aScore caro::score1Cell(const int currPlay, const int row, const int col,
 				scores[j] = MIN(scores[j], MAGICNUMBER); // not to overflow
 				if (chk > abs(rtn.connectedOrCost))
 					rtn.connectedOrCost = chk;
-				if (0 && debugThis || debugScoring) {
+				if ((debugThis && (debugCell || debugScoring))) {
 					cout << "CurrPlay=" << currPlay << " "
-							<< convertToChar(curVal) << "_ dir=" << dir << " c="
-							<< astar.Xlines[dir].continuous << " b="
+							<< convertToChar(curVal) << "_ dir=" << dir << " ctnuos="
+							<< astar.Xlines[dir].continuous << " connected="
+							<< astar.Xlines[dir].connected << " blk="
 							<< astar.Xlines[dir].blocked << " cnt="
 							<< astar.Xlines[dir].cnt << "-chk" << chk
 							<< "-rtn.c" << rtn.connectedOrCost << "-end"
@@ -673,10 +677,7 @@ aScore caro::score1Cell(const int currPlay, const int row, const int col,
 					cin >> ach;
 				}
 			}
-		/* TODO: still have problem with E_CAL, too few saving
-		 *
-		 */
-		if (0 && debugThis || debugScoring) {
+		if ((debugThis && (debugCell || debugScoring))) {
 			cout << board[row][col] << board[row][col].score << endl;
 		}
 		if (saveCheck) {
@@ -686,7 +687,6 @@ aScore caro::score1Cell(const int currPlay, const int row, const int col,
 				break;
 			}
 			if (!(testSaveScore == rtn)) {
-
 				cout << "SHORTCUT different, saveScore =" << testSaveScore
 						<< " newScore =" << rtn;
 				print(SYMBOLMODE2);
@@ -694,11 +694,7 @@ aScore caro::score1Cell(const int currPlay, const int row, const int col,
 				debugScoringAll = 1;
 			}
 		}
-		//cout << "rtnCnt=" << rtn.connected;
-
 	} while (redothisone);
-	// calculating overall score
-
 	return rtn;
 }
 
@@ -955,7 +951,7 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 	traceCell currTrace;
 	currTrace.prev = callerTrace;
 	currTrace.cell = nullptr;
-
+debugCell = false;
 	aScore previousMovePoints;
 
 	if (debugThis) {
@@ -987,6 +983,7 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 			break;
 		for (int col = 1; col < size; col++) {
 			if (board[row][col].val & (E_NEAR | E_TNEAR)) {
+				debugCell = inspectCell && ((row == iC[0]) && (col == iC[1]));
 				bestScore = score1Cell(currPlay, row, col, debugThis);
 				previousMovePoints += bestScore;
 				previousMovePoints.connectedOrCost = in_depth;
@@ -1009,6 +1006,8 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 				if (bestScore.myScore >= MAGICNUMBER) {
 					if (isMyPlay(currPlay)) { // 100% verified -- Do Not Change
 						termScore = bestScore;
+						previousMovePoints.oppScore =
+								previousMovePoints.oppScore >> 1;
 						terminated = 1;
 						if (debugThis)
 							cout << "AI-Win=" << bestScore;
@@ -1018,6 +1017,8 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 				} else if (bestScore.oppScore >= MAGICNUMBER) {
 					if (!(isMyPlay(currPlay))) {
 						termScore = bestScore;
+						previousMovePoints.myScore =
+								previousMovePoints.myScore >> 1;
 						terminated = 1;
 						if (debugThis)
 							cout << "Human-win=" << bestScore;
@@ -1048,13 +1049,15 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 		}
 
 		possMove[i] = nullptr;
+		print(SCOREMODE);
+
 		print(possMove);
 		print(SYMBOLMODE);
 		return bestScore;
 	} else if (terminated) {
 		bestScore = previousMovePoints;
 
-		if (debugScoring || debugThis) {
+		if ( 0 && (debugScoring || debugThis)) {
 			printDebugInfo(termScore.cellPtr->rowVal, termScore.cellPtr->colVal,
 					&currTrace, in_depth);
 			printf("nextPlay=%c, aiPlay=%c ", convertToChar(currPlay),
@@ -1068,7 +1071,7 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 
 		int swidth = setWidthDepth[highestConnected][0];
 		int sdepth = setWidthDepth[highestConnected][1];
-		sdepth = moreDepth ? sdepth + 2: sdepth;
+		sdepth = moreDepth ? sdepth + 2 : sdepth;
 
 		if (in_depth > (maxDepth - sdepth)) {
 			min_depth = (maxDepth - sdepth);
@@ -1165,9 +1168,9 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 						tracerArrayPtr[i]->savePoint = returnScore;
 						if (debugThis) {
 							if(isMax)
-							cout << "MAX-";
+							cout << "\nMAX-";
 							else
-							cout << "MIN-";
+							cout << "\nMIN-";
 							printf("i=%d,",i);
 							returnScoreArray[i] = returnScore;
 						}
@@ -1182,10 +1185,7 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 							//	cout << "bestScore=" << bestScore;
 
 						} else
-						if(debugThis||debugScoring) {
-							cout << returnScoreArray[i]<< "Return=" << returnScore;
-							cout << "ALPHA=" << alpha << " BETA=" << beta << endl;
-						}
+
 						if(isMax) {
 							alpha = asMAX(alpha, bestScore);
 						} else {
@@ -1194,7 +1194,7 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 						auto stop = high_resolution_clock::now();
 						auto duration = duration_cast<microseconds>(stop - start);
 						if(debugThis || (in_depth == maxDepth) ) {
-							cout << endl << *bestScoreArray[i].cellPtr << returnScore << "BS=" << bestScore ;
+							cout << endl << *bestScoreArray[i].cellPtr << returnScore << "BS=" << bestScore;
 						}
 						if((debugThis==0) && !underDebug) {
 							if(in_depth == maxDepth) {
@@ -1229,16 +1229,6 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 						} else {
 							adjustDepth = 0;
 						}
-						if(debugScoring||debugThis) {
-							if ((alpha.greaterValueThan(beta))) {
-								// quit if setVal's score is MAGIC
-								hist histArray;
-								tracerArrayPtr[i]->extractTohistArray(currPlay,bestScoreArray[i].cellPtr, histArray);
-								print(histArray);
-								cout << "ALPHA=" << alpha << " BETA=" << beta << " TERMINATE" << endl;
-							}
-						}
-
 						restoreScoreVal( cPtr->rowVal, cPtr->colVal,
 								saveScores, s1Score,
 								saveVals,s1Val);
@@ -1246,7 +1236,6 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 							terminated = 1;
 							thisNodeCnt = i+1;
 						}
-
 						if(docheck && (oneShot && !(compare(backup)))) {
 							char ach;
 							cout << " At depth=" << in_depth << " W="<< i << endl;
@@ -1275,9 +1264,9 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 						cout << "Mini";
 						cout << endl;
 						char redoCh =' ';
+						cout << "NodeCnt=" << thisNodeCnt << endl;
 
 						do {
-
 							for (int i = 0; i < thisNodeCnt; i++) {
 								cout <<"______________________________________________________________________________\n";
 								printf("\t<<%d,%d>>", in_depth, i);
