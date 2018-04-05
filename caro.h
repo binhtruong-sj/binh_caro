@@ -902,7 +902,7 @@ public:
 		return trace.size();
 	}
 	cell board[21][21];
-
+	unsigned int evalCnt = 0;
 	int size = 17;
 	int maxDepth = 50;
 	int my_AI_Play = X_;
@@ -1027,6 +1027,7 @@ public:
 		for (char pchar = 'A'; pchar <= 'P'; pchar++)
 			printf("%3C ", pchar);
 		cout << endl;
+		cout << "EvalCnt=" << evalCnt << endl;
 	}
 
 	void print(hist &histArray) {
@@ -1050,6 +1051,8 @@ public:
 		for (char pchar = 'A'; pchar <= 'P'; pchar++)
 			printf("%3C ", pchar);
 		cout << endl;
+		cout << "EvalCnt=" << evalCnt << endl;
+
 	}
 
 	void print(cell* possMove[]) {
@@ -1087,6 +1090,8 @@ public:
 		for (char pchar = 'A'; pchar <= 'P'; pchar++)
 			printf("%3C ", pchar);
 		cout << endl;
+		cout << "EvalCnt=" << evalCnt << endl;
+
 	}
 
 	void print() {
@@ -1100,6 +1105,8 @@ public:
 		for (char pchar = 'A'; pchar <= 'P'; pchar++)
 			printf("%2C ", pchar);
 		cout << endl;
+		cout << "EvalCnt=" << evalCnt << endl;
+
 	}
 
 	void undo1move() {

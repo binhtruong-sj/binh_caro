@@ -1027,9 +1027,10 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 		char ach;
 		cin >> ach;
 	}
+	evalCnt++;
 	if (in_depth < 0) {
 		int i;
-
+		evalCnt = 0;
 		sort(bestScoreArray.begin(), bestScoreArray.end(), betterMove);
 		for (i = 0; i < (int) bestScoreArray.size(); i++) {
 			if (bestScoreArray[i].bestMove() <= MINSCORE)
@@ -1193,6 +1194,7 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 								int save_adjustDepth = adjustDepth;
 								auto tduration = duration_cast<microseconds>(stop - topLevelStart);
 								tooLong = tduration.count() > runtimeInMicroSecond;
+								tooLong = 0;
 								if(tooLong) {
 									cout << " Total exe time too long, i =" << i << " out of " << thisNodeCnt << endl;
 									thisNodeCnt = i+1;
@@ -1207,6 +1209,7 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 								}
 								if((adjustDepth+min_depth) > in_depth)
 								adjustDepth = in_depth - min_depth -2;
+								adjustDepth = 0;
 							} else {
 								//tooLong = duration.count() > desiredRuntime*16;
 								tooLong = 0;
@@ -1243,7 +1246,7 @@ scoreElement caro::evalAllCell(int currPlay, int in_NodeCnt, int in_depth,
 						}
 						if(tooLong && (debugThis==0) && !underDebug) {
 							cout << "brk-"<<in_depth;
-							break;
+						//	break;
 						}
 					}
 
