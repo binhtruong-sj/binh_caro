@@ -8,7 +8,7 @@
 #include <algorithm>
 #ifndef CARO_H_
 #define CARO_H_
-
+#define ROWCOL 1
 #define SEast 7
 #define South 6
 #define SWest 5
@@ -22,24 +22,41 @@
 #define BOUNDARY 0xb // for boundary cells
 #define X_ 0x1    // occupied with X
 #define O_ 0x2    // occupied with O
-#define E_NEAR 0x4    // Empty cell, but close to other occupied cells
-#define E_TNEAR 0x8    // for temporary Near, clear after move is made
+#define isX_(a) a==X_
+#define isO_(a) a==O_
+
+#define E_NEAR 0x10    // Empty cell, but close to other occupied cells
+#define E_FNEAR 0x11    // Empty cell, but close to other occupied cells
+#define E_TNEAR 0x20    // for temporary Near, clear after move is made
+#define E_CAL 0x100
+#define E_LAST 0x8000
 
 #define printInterval 100000
 #define MAXDEPTH 41
-#define InspectDistance 3
+
 #define SEARCH_DISTANCE 7
 #define ReverseDirection(a) (a+4)%8
 //#define oppositeVal(a) a^0x3
-#define oppositeVal(a) a==X_?O_:X_
+#define oppositeVal(a) a^0x3
 #define myTurn(a) a%2
-//#define biasAdjust(favor_val, val,score,percent) (val == favor_val) ? ((score*percent)/100): score
+#define FLIP(a) ((a=a^1)? "ON":"OFF")
+#define percentAdjust(val,percent) (val*percent)/100
 
 #define MAXWIDTH 50
 #define CONTINUOUS_BIAS 1
 
-#define SYMBOLMODE 1
-#define SCOREMODE 2
+#define SYMBOLMODE 0
+#define SYMBOLMODE2 2
+#define SYMBOLMODE3 4
+#define SYMBOLMODE4 12
+
+#define SCOREMODE 6
+
+#define SCOREMODEm 8
+#define POSSMOVEMODE 10
+#define cellVal(rowcol) board[rowcol.row][rowcol.col].val
+#define cellScore(rowcol) board[rowcol.row][rowcol.col].score
+
 #define toBinary(v,bianry) {int vvall = v;\
 								for(int bit=7; bit>=0; bit--) {\
 										binary[bit] = (vvall & 0x1) + '0';\
@@ -47,18 +64,30 @@
 								}\
 								binary[8]= 0;}
 #define MIN(a,b) (a<b) ? a:b
+#define MAX(a,b) (a>b) ? a:b
+#define mapping(row) 16-row
+#define reverseMapping(row) 16-row
+
+#define asMIN(a,b) (b.greaterValueThan(a)) ? a:b
+#define asMAX(a,b) (a.greaterValueThan(b)) ? a:b
+
 #define convertToChar(setVal) (setVal == X_ ? 'X' : 'O')
-#define convertToCol(col) ((char)(col-1+'a'))
+#define convertCharToCol(col) ((char)(col-1+'a'))
 #define convertCellToStr(val) (char) ((val == X_) ? 'X' : \
                               (val == O_) ? 'O' :\
-		                   (val == E_FAR) ? '-' :\
+		                   (val == E_FAR) ? '.' :\
 		                     (val == 0xb) ? 'b' :\
-		                  (val == E_NEAR) ? '\"' : '.')
+		                     ( val & E_CAL)? ',':\
+                          (val & E_TNEAR) ? '+' :\
+                                              '`')
+
 /*
  * Line for the purpose of scoring
  */
 using std::hex;
 using std::showbase;
+
+typedef int points;
 struct hEntry {
 public:
 	int line;
@@ -67,6 +96,7 @@ public:
 	int score;
 	unsigned refcnt = 0;
 };
+
 class hashTable {
 public:
 	hEntry arrayE[1000];
@@ -79,33 +109,138 @@ public:
 	void addEntry(int line, int connected, int cnt, int score);
 	void print();
 };
+#define COSTADJUSTPERCENT 50 // 5 percent cost per level of depth, lose 50% value after 10 level
 
+class aScore {
+public:
+	points myScore = 0, oppScore = 0;
+	int connectedOrCost = 0;
+	bool operator ==(const aScore & v) {
+		bool out;
+		out = (v.myScore == myScore) && (v.oppScore == oppScore)
+				&& (v.connectedOrCost == connectedOrCost);
+		return out;
+	}
+	friend ostream & operator <<(ostream & out, const aScore & v) {
+		out << "(" << hex << v.myScore << "." << v.oppScore << "," << dec
+				<< v.connectedOrCost << ")";
+		return out;
+	}
+
+	aScore & operator =(const aScore & v) {
+		myScore = v.myScore;
+		oppScore = v.oppScore;
+		connectedOrCost = v.connectedOrCost;
+		return *this;
+	}
+
+	aScore & operator +=(const aScore & v) {
+		myScore = myScore + v.myScore;
+		oppScore = oppScore + v.oppScore;
+		connectedOrCost = MAX(connectedOrCost, v.connectedOrCost);
+		return *this;
+	}
+	aScore & init(int v, int d) {
+		myScore = v;
+		oppScore = d;
+		connectedOrCost = 0;
+		return *this;
+	}
+
+	int bestMove() {
+		return myScore + oppScore;
+	}
+	int bestValue() {
+		return myScore - oppScore;
+	}
+
+	bool greaterValueThan(aScore &other) {
+		bool result;
+		int deltaCost = other.connectedOrCost - connectedOrCost;
+		if (deltaCost == 0) {
+			result = (bestValue() > other.bestValue());
+		} else if (deltaCost > 0) {
+			int v = bestValue();
+			v = v >> deltaCost;
+			result = (v > other.bestValue());
+		} else {
+			int v = other.bestValue();
+			v = v >> -deltaCost;
+			result = (bestValue() > v);
+		}
+		return result;
+	}
+};
 class Line {
 public:
 	friend class hashTable;
+	int score;
 	int val = 0; // 32 bit encoded of a line
 				 // not the whole line.  Just started on O_
 				 // scan to maximum of 7 squares
 	int cnt = 0; // how many X_
 	int connected; // How long is the longest connected X_
+	int continuous;
 	int blocked; // is it blocked by O_ (next to an X_).
+	int offset; // to add or subtract to scoring
 	int type; // X_ or O_ are being search
-	int score = 0;
+
 	friend ostream & operator <<(ostream & out, Line & v) {
 		char binary[9];
 		toBinary(v.val, binary);
 		out << "Line=" << binary << " Cnt=" << v.cnt;
-		out << " Blocked=" << v.blocked << " Connected=" << v.connected;
+		out << " Blocked=" << v.blocked << " Connected=" << v.connected
+				<< " cont=" << v.continuous;
 		out << " Score = " << hex << v.score;
 		return out;
 	}
 
-	int evaluate();
+	bool operator ==(Line & other) {
+		bool rtnval;
+		rtnval = true;
+		if (val != other.val) {
+			cout << "val diff";
+			rtnval = false;
+		}
+		if (score != other.score) {
+			cout << "score diff";
+			rtnval = false;
+		}
+
+		if (connected != other.connected) {
+			cout << "connected diff";
+			rtnval = false;
+
+		}
+		if (blocked != other.blocked) {
+			cout << "blocked diff";
+			rtnval = false;
+
+		}
+		if (offset != other.offset) {
+			cout << "offset diff";
+			rtnval = false;
+
+		}
+		if (continuous != other.continuous) {
+			cout << "continuous diff";
+			rtnval = false;
+
+		}
+		if (cnt != other.cnt) {
+			cout << "cnt diff";
+			rtnval = false;
+
+		}
+		return rtnval;
+	}
+	int evaluate(bool ending);
 	void print() {
 		char binary[9];
 		toBinary(val, binary);
-		printf("Line=%s Cnt=%d blocked=%d connected =%d Score=0x%x", binary,
-				cnt, blocked, connected, score);
+		printf("Line=%s Cnt=%d blocked=%d connected =%d", binary, cnt, blocked,
+				connected);
+		cout << hex << score;
 		cout << endl;
 	}
 };
@@ -116,7 +251,7 @@ public:
 class FourLines {
 public:
 	Line Xlines[4];
-	int score = 0;
+	int score;
 	void print();
 };
 
@@ -126,6 +261,7 @@ public:
 class cellV {
 public:
 	int val = 0;
+	aScore score;
 	friend ostream & operator <<(ostream & out, cellV& v) {
 		out << convertCellToStr(v.val);
 		return out;
@@ -133,96 +269,222 @@ public:
 };
 class cell: public cellV {
 public:
-	int rowVal, colVal, score = 0;
+	int rowVal, colVal;
 	cell *near_ptr[8];
 	void print() {
 		cout << val;
 	}
 
-	void print(int mode) {
-		if (mode == 0) {
-			printf("%2X", val);
-		} else if (mode == SYMBOLMODE) {
+	void print(int v, int num) {
+		if (num < 0) {
 			char ach = (char) convertCellToStr(val);
-			printf("%2c ", ach);
+			printf("%3c ", ach);
 		} else {
-			printf("%2x ", score / 100);
+			char ach = (char) convertCellToStr(v);
+			printf("%2d%c ", num, ach);
+		}
+		return;
+	}
+
+	void print(int mode) {
+		int pval = val & 0xFFF;
+		if (pval & (X_ | O_)) {
+			if ((mode % 2) == 0) {
+				char ach = (char) convertCellToStr(pval);
+				if (val & E_LAST)
+					printf(" <%c>", ach);
+				else
+					printf("%3c ", ach);
+			} else {
+				printf("%3c ", ' ');
+			}
+			return;
+		}
+
+		switch (mode) {
+		case SYMBOLMODE: {
+			char ach = (char) convertCellToStr(val);
+			printf("%3c ", ach);
+			return;
+		}
+		case (SYMBOLMODE + 1): {
+			return;
+		}
+		case SYMBOLMODE2: {
+			char ach = (char) convertCellToStr(val);
+			printf("%3c ", ach);
+			return;
+		}
+		case (SYMBOLMODE2 + 1): {
+			pval = score.myScore + score.oppScore;
+			break;
+		}
+		case SYMBOLMODE3: {
+			char ach = (char) convertCellToStr(val);
+			printf("%3c ", ach);
+			return;
+		}
+		case (SYMBOLMODE3 + 1): {
+			pval = score.myScore - score.oppScore;
+			break;
+		}
+		case SYMBOLMODE4: {
+			char ach = (char) convertCellToStr(val);
+			printf("%3c ", ach);
+			return;
+		}
+		case (SYMBOLMODE4 + 1): {
+			pval = val;
+			break;
+		}
+		case SCOREMODE: // aiPlay
+			pval = score.myScore;
+			break;
+		case SCOREMODE + 1: // opnVal or defVal
+			pval = score.oppScore;
+			break;
+		case SCOREMODEm: // +
+			pval = score.myScore + score.oppScore;
+			break;
+		case SCOREMODEm + 1: // -
+			pval = abs(score.connectedOrCost);
+			break;
+		case POSSMOVEMODE: {
+			char ach = (char) convertCellToStr(val);
+			printf("%3c ", ach);
+			return;
+		}
+		case (POSSMOVEMODE + 1): {
+			return;
+		}
+		default:
+			break;
+		}
+		if (pval)
+			if (pval > 0xFFF)
+				cout << "FFF ";
+			else
+				printf("%3x ", (0xFFF & (pval)));
+		else {
+			if ((mode % 2) == 0)
+				printf("  . ");
+			else
+				printf("    ");
+//TODO: y defval printed on X 9j
 		}
 	}
 
 	void printid() {
-		printf("[%d%c]", rowVal, convertToCol(colVal));
+		printf("[%d%c]", mapping(rowVal), convertCharToCol(colVal));
 	}
 
 	friend ostream & operator <<(ostream &out, cell &c) {
-		out << "[" << c.rowVal
-				<< convertToCol(c.colVal) << "]" << convertCellToStr(c.val);
+		out << "[" << dec
+				<< mapping(
+						c.rowVal) << convertCharToCol(c.colVal) << "]" << convertCellToStr(c.val);
 		return out;
 	}
+	cell & operator =(cell &c) {
+		score = c.score;
+		val = c.val;
+		return *this;
+	}
 
-	bool operator ==(cell &lookUpCell) {
-		/*
-		 printf("Comparing Cell ");
-		 lookUpCell.printid();
-		 cout << "===" ;
-		 printid();
-		 */
-		return ((lookUpCell.rowVal == rowVal) && (lookUpCell.colVal == colVal));
+	bool operator ==(cell &other) {
+		return ((other.score == score) && (other.val == val));
 	}
 };
 
-class scoreElement {
+class scoreElement: public aScore {
 public:
-	int val;
 	cell *cellPtr = nullptr;
+	friend ostream & operator <<(ostream &output,
+			vector<scoreElement> &values) {
+		for (auto const& value : values) {
+			output << *value.cellPtr << value.myScore << "," << value.oppScore
+					<< "," << dec << value.connectedOrCost << "=" << dec
+					<< value.myScore - value.oppScore << dec << endl;
+		}
+		return output;
+
+	}
 	friend ostream & operator <<(ostream &out, scoreElement &c) {
-		out << *c.cellPtr;
-		printf("0x%X", c.val/128);
+		if (c.cellPtr) {
+			out << *c.cellPtr;
+			out << hex << (c.myScore) << "," << hex << (c.oppScore) << ","
+					<< dec << c.connectedOrCost << "=" << dec
+					<< c.myScore - c.oppScore << dec << " ";
+		} else
+			cout << "NULL";
 		return out;
 	}
 	scoreElement & operator=(const scoreElement & other) {
-		val = other.val;
+		myScore = other.myScore;
+		oppScore = other.oppScore;
+		connectedOrCost = other.connectedOrCost;
 		cellPtr = other.cellPtr;
 		return *this;
 	}
 
+	scoreElement & operator=(const aScore & other) {
+		myScore = other.myScore;
+		oppScore = other.oppScore;
+		connectedOrCost = other.connectedOrCost;
+		return *this;
+	}
+
+	scoreElement & operator=(cell & other) {
+		cellPtr = &other;
+		return *this;
+	}
+	scoreElement & score(scoreElement& f) {
+		myScore = f.myScore;
+		oppScore = f.oppScore;
+		return *this;
+	}
+	points bestMove() {
+		return myScore + oppScore;
+	}
+	points bestValue() {
+		return myScore - oppScore;
+	}
+	bool greaterMove(scoreElement &other) {
+		return (bestMove() > other.bestMove());
+	}
+	int getScore(int setVal, int myval) { // returning setVal's score, need aiPlay for ref
+		return ((setVal == myval) ? myScore : oppScore);
+	}
 };
 
 class tScore: public scoreElement {
 public:
-	int ts_ret;
+	aScore ts_ret;
 	tScore();
 	tScore(scoreElement);
 };
 
-class tsDebug {
+class hist {
 public:
-	tScore Array[40][40];
-	int enablePrinting = 0;
-	int printCnt = 0;
-	int debugWidthAtDepth[MAXDEPTH];
-	int debugBreakAtDepth = -1; // not breaking
-								// indicating the depth to take a break if follow
-								// the path of debugWidthAtDepth array
-
-	int bestWidthAtDepth[MAXDEPTH];
-	int lowDepth = 0;
-	tsDebug();
-	void print(int maxdepth, int widthAtDepth[], int bestWidthAtDepth[]) {
-		for (int d = maxdepth; d >= lowDepth; d--) {
-			cout << "Depth " << d << " Width=" << widthAtDepth[d] << " Best W:"
-					<< bestWidthAtDepth[d];
-			for (int w = 0; w < widthAtDepth[d]; w++) {
-				if (w % 2 == 0)
-					printf("\n");
-				cout << "\t<" << d << "," << w << ">";
-				cout << *Array[d][w].cellPtr;
-				printf("=$0x%x,ret$0x%x ", Array[d][w].val/128, Array[d][w].ts_ret/128);
-			}
-			cout << endl;
+	cell *hArray[100];
+	int size;
+	int gameCh;
+	friend ostream & operator <<(ostream &out, const hist&c) {
+		for (int i = 0; i < c.size; i++) {
+			out << *c.hArray[i] << "->";
 		}
+		out << endl;
+		return out;
+	}
+
+	int locate(int row, int col) {
+		for (int i = 0; i < size; i++) {
+			if ((row == hArray[i]->rowVal) && (col == hArray[i]->colVal))
+				return (i);
+		}
+		return (-1);
 	}
 };
+
 class acrumb: public cellV {
 public:
 	int width_id, depth_id;
@@ -257,6 +519,19 @@ public:
 		}
 		out << endl;
 		return out;
+	}
+
+	void extractTohistArray(hist & histArray) {
+		int j = 0;
+		histArray.gameCh = top.val;
+		histArray.hArray[j++] = top.ptr;
+		for (int i = top.depth_id - 1; i >= 0; i--) {
+			if (array[i].ptr)
+				histArray.hArray[j++] = array[i].ptr;
+			else
+				break;
+		}
+		histArray.size = j;
 	}
 
 	breadCrumb & operator=(const breadCrumb & other) {
@@ -326,25 +601,319 @@ public:
  * caro table can be upto 20x20.  However 15x15 is more fair to O'x
  * size-2 is the size of the game; 0 and size-1 are used for boundary cells
  */
-
-class caro {
+class caroDebug {
+	vector<char> debugTrace, trace;
+	int drow, dcol;
+	/*
+	 *
+	 */
 public:
-	cell board[21][21];
-	int prevD;
-	int evalCnt = 0;
-	int myMoveAccScore = 0;
-	int opnMoveAccScore = 0;
-	int size = 17;
-	int widthAtDepth[40];
 
-	int terminate;
-	int myVal = X_;
+	int printTrace() {
+		cout << "\nTRACE: ";
+		for (unsigned int i = 0; i < trace.size(); i++)
+			printf("%02d,", trace[i]);
+		return (trace.size());
+	}
+	/*
+	 *
+	 */
+	void enterDebugTrace(char * debugString) {
+		char *dstr;
+		dstr = debugString;
+		debugTrace.clear();
+		while (char achar = *dstr++) {
+			if (achar != ',') {
+				debugTrace.push_back((points) (achar - '0'));
+			}
+		}
+	}
+	void enterDebugCell(char *debugString) {
+		char ccol;
+		sscanf(debugString, "[%d%c]", &drow, &ccol);
+		if (isupper(ccol))
+			dcol = ccol - 'A';
+		else
+			dcol = ccol - 'a';
+
+		cout << "Debug info, row =" << drow << " col=" << dcol << endl;
+	}
+	bool traceMatch(int r, int c) {
+		bool cellmatch = false;
+		if ((drow >= 0) && (dcol >= 0)) {
+			if ((r == drow) && (c == dcol))
+				cellmatch = true;
+		} else {
+			cellmatch = true;
+		}
+
+		if (cellmatch) {
+			if (trace == debugTrace) {
+				cout << "---------------TRACE MATCH  row=" << r << " col=" << c
+						<< endl;
+				return true;
+			}
+		}
+
+		return false;
+	}
+	void tracePush(int i) {
+		trace.push_back((points) i);
+	}
+
+	void tracePop() {
+		return (trace.pop_back());
+	}
+
+}
+;
+class debugid {
+public:
+	vector<int> id;
+	bool find(int i) {
+		bool debugNext = false;
+		for (unsigned int ii = 0; ii < id.size(); ii++) {
+			if ((debugNext = (id[ii] == i))) {
+				break;
+			}
+		}
+		return debugNext;
+	}
+};
+
+class tracer {
+public:
+	tracer *prev = nullptr, *next = nullptr;
+	scoreElement savePoint;
+	int atDepth;
+
+	tracer() {
+		savePoint.cellPtr = nullptr;
+	}
+	tracer(cell *incptr) {
+		savePoint.cellPtr = incptr;
+	}
+	~tracer() {
+		// tracer is a link list. When delete, need to check if it point to a link list
+		// if so, need to delete the entire link list
+		tracer *toDel;
+		toDel = next; // save the next ptr before deleteSelf.
+		//	cout << savePoint << endl;
+		next = nullptr;
+		prev = nullptr;
+		if (toDel) {
+			delete toDel;
+		}
+	}
+	friend ostream & operator <<(ostream & out, tracer & v) {
+		tracer *tv = &v;
+		cout << "TrC: ";
+		do {
+			if (tv) {
+				cout << tv->atDepth << tv->savePoint << "->";
+				tv = tv->next;
+			} else
+				break;
+		} while (1);
+		cout << endl;
+		tv = &v;
+		while (1) {
+			if (tv) {
+				cout << tv->atDepth << tv->savePoint << "<-";
+				tv = tv->prev;
+			} else
+				break;
+		}
+		return out;
+	}
+	void extractTohistArray(int val, cell * cptr, hist & histArray) {
+		int j = 0;
+		tracer *tracerPtr;
+		histArray.gameCh = val;
+		histArray.hArray[j++] = cptr;
+		histArray.hArray[j++] = savePoint.cellPtr;
+		tracerPtr = next;
+		while (1) {
+			if (tracerPtr == nullptr)
+				break;
+			if (tracerPtr->savePoint.cellPtr) {
+				histArray.hArray[j++] = tracerPtr->savePoint.cellPtr;
+			} else
+				break;
+			tracerPtr = tracerPtr->next;
+		}
+		histArray.size = j;
+	}
+};
+class getInputStr {
+	char inputstr[80];
+	char *ptr = inputstr;
+public:
+	getInputStr() {
+		clear();
+	}
+	void clear() {
+		ptr = inputstr;
+		inputstr[0] = 0;
+	}
+
+	int mygetstr(char *returnStr) {
+		do {
+			cout << "STRANGE-" << strlen(ptr);
+			printf("%s-\n", ptr);
+			int i = 0;
+			if (*ptr) {
+				if (!(isalpha(*ptr))) {
+					while (isdigit(*ptr) || (*ptr == '-') || (*ptr == ',')) {
+						if (*ptr == ',') {
+							ptr++;
+							break;
+						}
+						returnStr[i++] = *ptr++;
+					}
+					returnStr[i] = 0;
+				} else {
+					while ((isalpha(*ptr))) {
+						returnStr[i++] = *ptr++;
+					}
+					returnStr[i] = 0;
+				}
+				return (strlen(ptr));
+			} else {
+				cout << "getting input" << endl;
+				cin.clear();
+				cin.ignore(numeric_limits < streamsize > ::max(), '\n');
+				cin >> inputstr;
+				ptr = inputstr;
+			}
+		} while (1);
+	}
+};
+class rowCol {
+public:
+	int row, col;
+
+	rowCol() {
+		row = col = 0;
+	}
+	rowCol(int r, int c) {
+		row = r;
+		col = c;
+	}
+
+	rowCol & operator=(const rowCol & other) {
+		row = other.row;
+		col = other.col;
+		return *this;
+	}
+
+	rowCol & setv(int r, int c) {
+		row = r;
+		col = c;
+		return *this;
+	}
+
+	void moveToDir(int rdir, int cdir) {
+		row += rdir;
+		col += cdir;
+	}
+	void moveToDir(rowCol & rcDir) {
+		row += rcDir.row;
+		col += rcDir.col;
+	}
+	void reverse() {
+		row = -row;
+		col = -col;
+	}
+	void setDirection(int dir) {
+		switch (dir) {
+		case East:
+			setv(0, +1);
+			break;
+		case NEast:
+			setv(-1, +1);
+			break;
+		case North:
+			setv(-1, 0);
+			break;
+		case NWest:
+			setv(-1, -1);
+			break;
+		case West:
+			setv(0, -1);
+			break;
+		case SWest:
+			setv(1, -1);
+			break;
+		case South:
+			setv(1, 0);
+			break;
+		case SEast:
+			setv(1, +1);
+			break;
+		}
+	}
+	/*
+	 int cellVal() {
+	 return board[row][col].val;
+	 }
+	 */
+};
+class moveHist {
+public:
+	cell * movesHist[256]; // fixed at 256, change to use remeainder if different setting
+	int movesHistVal[256];
+	int lastMoveIndex = 0;
+	int saveLast2p;
+	int moveCnt = 0;
+	void addMove(cell *b) {
+		moveCnt++;
+		lastMoveIndex = (lastMoveIndex + 1) & 0xFF; // wrap around -- circular
+		saveLast2p = lastMoveIndex;
+		movesHist[lastMoveIndex] = b;
+		movesHistVal[lastMoveIndex] = b->val;
+	}
+	void addMove(int mvNum, cell *b) {
+		int lm = mvNum;
+		movesHist[lm] = b;
+		movesHistVal[lm] = b->val;
+		lastMoveIndex = moveCnt; // this is to force the entry .. only work if all the restore are done
+		saveLast2p = moveCnt;
+	}
+	void extractTohistArray(int currVal, hist & histArray) {
+		histArray.gameCh = currVal;
+		int i = moveCnt;
+		while (i) {
+			histArray.hArray[i - 1] = movesHist[lastMoveIndex - (moveCnt - i)];
+			i--;
+		}
+		histArray.size = moveCnt;
+	}
+}
+;
+class caro: public moveHist {
+public:
+	caroDebug cdebug;
+	vector<unsigned char> trace;
+	int printTrace() {
+		cout << "\nTRACE: ";
+		for (unsigned i = 0; i < trace.size(); i++)
+			printf("%02de", trace[i]);
+		return trace.size();
+	}
+	cell board[21][21];
+	unsigned int evalCnt = 0;
+	int size = 17;
+	int maxDepth = 50;
+	int my_AI_Play = X_;
+
+	int saveLast2p;
+	int localCnt = 0;
+	int desiredRuntime = 0;
+	cell* possMove[50];
 	caro(int table_size) {
 		size = table_size + 1;
 		// Setup pointer to ajacent cells, only from 1 to size-1
-		terminate = 0;
-		for (int w = 0; w < 40; w++)
-			widthAtDepth[w] = 0;
 
 		for (int row = 0; row <= size; row++) {
 			for (int col = 0; col <= size; col++) {
@@ -371,7 +940,9 @@ public:
 		}
 	}
 	;
-
+	bool isMyPlay(int play) {
+		return (play & my_AI_Play);
+	}
 	virtual ~caro();
 	friend ostream & operator <<(ostream &out, const caro &c) {
 		out << endl;
@@ -388,23 +959,139 @@ public:
 		return out;
 	}
 
+	caro & operator =(caro & other) {
+		size = other.size;
+		maxDepth = other.maxDepth;
+		my_AI_Play = other.my_AI_Play;
+		for (int row = 0; row <= size; row++) {
+			for (int col = 0; col <= size; col++) {
+				board[row][col] = other.board[row][col];
+			}
+		}
+		return *this;
+	}
+
+	caro & save(caro & other) {
+		for (int row = 0; row <= size; row++) {
+			for (int col = 0; col <= size; col++) {
+				other.board[row][col] = board[row][col];
+			}
+		}
+		return *this;
+	}
+	bool compare(caro & other) {
+		bool result;
+		for (int row = 0; row <= size; row++) {
+			for (int col = 0; col <= size; col++) {
+				if (!(result = (other.board[row][col].score
+						== board[row][col].score))) {
+					cout << "new";
+					print(SYMBOLMODE2);
+					cout << "backup";
+					other.print(SYMBOLMODE2);
+					cout << "FAILED  at row=" << row << " col=" << col << endl;
+					cout << board[row][col] << board[row][col].score << " <> "
+							<< other.board[row][col]
+							<< other.board[row][col].score;
+					return (false);
+				}
+			}
+		}
+		return true;
+	}
+
 	void print(int mode) {
-		cout << endl;
+
+		int lastMoveIndex1 = lastMoveIndex - 1;
 
 		for (int row = 0; row <= size; row++) {
 			for (int col = 0; col <= size; col++) {
+				if (movesHist[lastMoveIndex] == &board[row][col])
+					board[row][col].val ^= E_LAST;
+				if (movesHist[lastMoveIndex1] == &board[row][col])
+					board[row][col].val ^= E_LAST;
 				board[row][col].print(mode);
+				if (movesHist[lastMoveIndex] == &board[row][col])
+					board[row][col].val ^= E_LAST;
+				if (movesHist[lastMoveIndex1] == &board[row][col])
+					board[row][col].val ^= E_LAST;
 			}
-			cout << " ROW " << row << endl;
+			cout << " ROW " << dec << mapping(row) << endl;
+			for (int col = 0; col <= size; col++) {
+				board[row][col].print(mode + 1);
+			}
+
+			cout << endl;
 		}
-		cout << "   ";
+		cout << "    ";
 		for (char pchar = 'A'; pchar <= 'P'; pchar++)
-			printf("%2C ", pchar);
+			printf("%3C ", pchar);
 		cout << endl;
-		printf("evalCnt=%d myScore=%d opnScore=%d delta=%d", evalCnt,
-				myMoveAccScore, opnMoveAccScore,
-				opnMoveAccScore - myMoveAccScore);
+		cout << "EvalCnt=" << evalCnt << endl;
+	}
+
+	void print(hist &histArray) {
+		int v, vb;
+		for (int row = 0; row <= size; row++) {
+			for (int col = 0; col <= size; col++) {
+				int lh = histArray.locate(row, col);
+				vb = board[row][col].val;
+				if (vb & (X_ | O_))
+					v = vb;
+				else
+					v = (lh % 2) ?
+							oppositeVal(histArray.gameCh) : histArray.gameCh;
+				board[row][col].print(v, lh);
+
+			}
+			cout << " ROW " << dec << mapping(row) << endl;
+			cout << endl;
+		}
+		cout << "    ";
+		for (char pchar = 'A'; pchar <= 'P'; pchar++)
+			printf("%3C ", pchar);
 		cout << endl;
+		cout << "EvalCnt=" << evalCnt << endl;
+
+	}
+
+	void print(cell* possMove[]) {
+		int lastMoveIndex1 = lastMoveIndex - 1;
+		for (int row = 0; row <= size; row++) {
+			for (int col = 0; col <= size; col++) {
+				if (movesHist[lastMoveIndex] == &board[row][col])
+					board[row][col].val ^= E_LAST;
+				if (movesHist[lastMoveIndex1] == &board[row][col])
+					board[row][col].val ^= E_LAST;
+				int i;
+				for (i = 0; i < 40; i++) {
+					if (possMove[i] == nullptr) {
+						i = 41;
+						break;
+					} else if (possMove[i] == &board[row][col]) {
+						break;
+					}
+				}
+				if (i >= 40)
+					board[row][col].print(SYMBOLMODE);
+				else
+					printf("%3d ", i + 1);
+
+				if (movesHist[lastMoveIndex] == &board[row][col])
+					board[row][col].val ^= E_LAST;
+				if (movesHist[lastMoveIndex1] == &board[row][col])
+					board[row][col].val ^= E_LAST;
+
+			}
+			cout << " ROW " << dec << mapping(row) << endl;
+			cout << endl;
+		}
+		cout << "    ";
+		for (char pchar = 'A'; pchar <= 'P'; pchar++)
+			printf("%3C ", pchar);
+		cout << endl;
+		cout << "EvalCnt=" << evalCnt << endl;
+
 	}
 
 	void print() {
@@ -413,28 +1100,467 @@ public:
 			for (int col = 0; col <= size; col++) {
 				board[row][col].print(0);
 			}
-			cout << " ROW " << row << endl;
+			cout << " ROW " << mapping(row) << endl;
 		}
 		for (char pchar = 'A'; pchar <= 'P'; pchar++)
 			printf("%2C ", pchar);
 		cout << endl;
-	}
-	unsigned setCellCnt = 0;
-	cell* setCell(int val, int x, int y, int near);
-	void setNEAR(int x, int y);
-	void setTNEAR(int x, int y);
-	cell* restoreCell(int val, int x, int y);
-	void undo1move();
-	void redo1move();
+		cout << "EvalCnt=" << evalCnt << endl;
 
+	}
+
+	void undo1move() {
+		cout << "Undo p=" << lastMoveIndex << "moveCnt=" << moveCnt << endl;
+		cout << "saveLast2p=" << saveLast2p << endl;
+
+		if ((lastMoveIndex - 2 != saveLast2p) && moveCnt > 0) {
+			moveCnt -= 2;
+			lastMoveIndex = (lastMoveIndex - 2) & 0xff;
+			movesHistVal[lastMoveIndex + 2] = restoreCell(E_FAR,
+					movesHist[lastMoveIndex + 2]->rowVal,
+					movesHist[lastMoveIndex + 2]->colVal);
+			movesHistVal[lastMoveIndex + 1] = restoreCell(E_FAR,
+					movesHist[lastMoveIndex + 1]->rowVal,
+					movesHist[lastMoveIndex + 1]->colVal);
+		}
+	}
+	void redo1move() {
+		cout << "Redo p=" << lastMoveIndex << "moveCnt=" << moveCnt << endl;
+		cout << "saveLast2p=" << saveLast2p << endl;
+
+		if (lastMoveIndex != saveLast2p) {
+			moveCnt += 2;
+			restoreCell(movesHistVal[lastMoveIndex + 2],
+					movesHist[lastMoveIndex + 2]->rowVal,
+					movesHist[lastMoveIndex + 2]->colVal);
+			restoreCell(movesHistVal[lastMoveIndex + 1],
+					movesHist[lastMoveIndex + 1]->rowVal,
+					movesHist[lastMoveIndex + 1]->colVal);
+			lastMoveIndex = (lastMoveIndex + 2) & 0xff;
+		}
+	}
+	void reCalBoard(int currVal) {
+		for (int row = 1; row < size; row++)
+			for (int col = 1; col < size; col++) {
+				if ((board[row][col].val & (O_ | X_)) == 0)
+					score1Cell(currVal, row, col, false);
+			}
+	}
+
+	unsigned setCellCnt = 0;
+#define InspectDistance 4
+#define saveRestoreDist InspectDistance+8 //  ---X---
+	/*
+	 * set a cell to X or O
+	 */
+	int lastRow1, lastCol1;
+	int lastRow2, lastCol2;
+	cell * setCell(int setVal, int row, int col, int near) {
+		if ((board[row][col].val & (X_ | O_)) == 0) { // this check is bc of lazyness of setting up board
+			if (near == E_NEAR) { // Only real set can be UNDO
+				// code to handle undo
+				addMove(&board[row][col]);
+				board[row][col].score = {moveCnt,0};
+			} else if (near == E_FNEAR) { // Only real set can be UNDO
+				moveCnt++;
+				board[row][col].score = {moveCnt,0};
+			}
+			else {
+				localCnt++;
+				board[row][col].score = {moveCnt+localCnt,0};
+			}
+			board[row][col].val = setVal;
+			if (near != E_FAR) {
+				setNEAR(row, col, near & 0xF0);
+			}
+		}
+		return &board[row][col];
+	}
+
+	/*
+	 * After temporary setting a Cell to X' or O' for scoring, now return it and its neighbor to prev values
+	 */
+
+#ifdef ROWCOL
+	int restoreCell(int saveVal, int row, int col) {
+		rowCol crCurrCell,crDir;
+		int rval;
+		localCnt--;
+		for (int dir = East; dir <= SEast; dir++) {
+			crDir.setDirection(dir);
+			crCurrCell.setv(row,col);
+			for (int i = 0; i < InspectDistance; i++) {
+				do {
+					crCurrCell.moveToDir(crDir);
+					rval = cellVal(crCurrCell) & (X_ | O_);
+					if (rval)
+					i = 0;
+				}while ((rval != 3) && rval);
+
+				cellVal(crCurrCell) = cellVal(crCurrCell) & ~(E_CAL);
+				if (cellVal(crCurrCell) & (E_TNEAR)) {
+					cellVal(crCurrCell) = E_FAR; // only clear the cell with E_TNEAR (temporary NEAR) to FAR
+				} else if (rval == 3) // boundary
+				break;
+			}
+		}
+		rval = board[row][col].val;
+		board[row][col].val = saveVal & ~(E_CAL); // Return the val to prev
+		return rval;
+	}
+
+	/*
+	 * Temporary near marking set when traverse further ahead
+	 */
+	void setNEAR(int row, int col, int near) {
+		rowCol crCurrCell,crDir;
+		int rval;
+		for (int dir = East; dir <= SEast; dir++) {
+			crCurrCell.setv(row,col);
+			crDir.setDirection(dir);
+			for (int i = 0; i < InspectDistance; i++) {
+				do {
+					crCurrCell.moveToDir(crDir);
+					rval = cellVal(crCurrCell) & (X_ | O_);
+					if (rval)
+					i = 0;
+				}while ((rval != 3) && rval);
+				cellVal(crCurrCell) = cellVal(crCurrCell) & ~(E_CAL);
+				if(cellVal(crCurrCell)==0) {
+					cellVal(crCurrCell) = near;
+				}
+				if (rval == 3) // boundary
+				break;
+			}
+		}
+	}
+	/*
+	 *
+	 */
+	void saveScoreVal(int row, int col, aScore saveScoreArray[8][saveRestoreDist],
+			aScore & s1Score, int saveValArray[8][saveRestoreDist], int & s1Val) {
+		rowCol crCurrCell;
+		rowCol crDir;
+		int rval;
+		s1Score = board[row][col].score;
+		s1Val = board[row][col].val;
+		for (int dir = East; dir <= SEast; dir++) {
+			crCurrCell.setv(row,col);
+			crDir.setDirection(dir);
+			int j = 0;
+			for (int i = 0; i < InspectDistance; i++) {
+				do {
+					crCurrCell.moveToDir(crDir);
+					rval = cellVal(crCurrCell) & (X_ | O_);
+					if (rval)
+					i = 0;
+				}while ((rval != 3) && rval);
+				saveScoreArray[dir][j] = cellScore(crCurrCell);
+				saveValArray[dir][j++] = cellVal(crCurrCell);
+				if (rval == 3) // boundary
+				break;
+			}
+		}
+	}
+	void restoreScoreVal(int row, int col,
+			aScore saveScoreArray[8][saveRestoreDist], aScore & s1Score,
+			int saveValArray[8][saveRestoreDist], int & s1Val) {
+		//cell *currCell;
+		rowCol crCurrCell;
+		rowCol crDir;
+
+		int rval;
+		board[row][col].score = s1Score;
+		board[row][col].val = s1Val;
+		for (int dir = East; dir <= SEast; dir++) {
+			crCurrCell.setv(row,col);
+			crDir.setDirection(dir);
+			int j = 0;
+			for (int i = 0; i < InspectDistance; i++) {
+				do {
+					crCurrCell.moveToDir(crDir);
+					rval = cellVal(crCurrCell) & (X_ | O_);
+					if (rval)
+					i = 0;
+				}while ((rval != 3) && rval);
+				cellScore(crCurrCell) = saveScoreArray[dir][j];
+				cellVal(crCurrCell) = saveValArray[dir][j++];
+				if (rval == 3) // boundary
+				break;
+			}
+		}
+	}
+#else
+	int restoreCell(int saveVal, int row, int col) {
+		cell *currCell;
+		int rval;
+		localCnt--;
+		for (int dir = East; dir <= SEast; dir++) {
+			currCell = &board[row][col];
+			for (int i = 0; i < InspectDistance; i++) {
+				do {
+					currCell = currCell->near_ptr[dir];
+					rval = currCell->val & (X_ | O_);
+					if (rval)
+					i = 0;
+				}while ((rval != 3) && rval);
+				currCell->val = currCell->val & ~(E_CAL);
+				if (currCell->val & (E_TNEAR)) {
+					currCell->val = E_FAR; // only clear the cell with E_TNEAR (temporary NEAR) to FAR
+
+				} else if (rval == 3) // boundary
+				break;
+			}
+		}
+		rval = board[row][col].val;
+		board[row][col].val = saveVal & ~(E_CAL); // Return the val to prev
+		return rval;
+	}
+
+	void setNEAR(int row, int col, int near) {
+		cell *currCell;
+		int rval;
+		for (int dir = East; dir <= SEast; dir++) {
+			currCell = &board[row][col];
+			for (int i = 0; i < InspectDistance; i++) {
+				do {
+					currCell = currCell->near_ptr[dir];
+					rval = currCell->val & (X_ | O_);
+					if (rval)
+					i = 0;
+				}while ((rval != 3) && rval);
+				currCell->val = currCell->val & ~(E_CAL);
+				if (currCell->val == 0)
+				currCell->val = near;
+				if (rval == 3) // boundary
+				break;
+			}
+		}
+	}
+	void saveScoreVal(int row, int col,
+			aScore saveScoreArray[8][saveRestoreDist], aScore & s1Score,
+			int saveValArray[8][saveRestoreDist], int & s1Val) {
+		cell *currCell;
+		int rval;
+		s1Score = board[row][col].score;
+		s1Val = board[row][col].val;
+		for (int dir = East; dir <= SEast; dir++) {
+			currCell = &board[row][col];
+			int j = 0;
+			for (int i = 0; i < InspectDistance; i++) {
+				do {
+					currCell = currCell->near_ptr[dir];
+					rval = currCell->val & (X_ | O_);
+					if (rval)
+					i = 0;
+				}while ((rval != 3) && rval);
+				saveScoreArray[dir][j] = currCell->score;
+				saveValArray[dir][j++] = currCell->val;
+				if (rval == 3) // boundary
+				break;
+			}
+		}
+	}
+	void restoreScoreVal(int row, int col,
+			aScore saveScoreArray[8][saveRestoreDist], aScore & s1Score,
+			int saveValArray[8][saveRestoreDist], int & s1Val) {
+		cell *currCell;
+		int rval;
+		board[row][col].score = s1Score;
+		board[row][col].val = s1Val;
+		for (int dir = East; dir <= SEast; dir++) {
+			currCell = &board[row][col];
+			int j = 0;
+			for (int i = 0; i < InspectDistance; i++) {
+				do {
+					currCell = currCell->near_ptr[dir];
+					rval = currCell->val & (X_ | O_);
+					if (rval)
+					i = 0;
+				}while ((rval != 3) && rval);
+				currCell->score = saveScoreArray[dir][j];
+				currCell->val = saveValArray[dir][j++];
+				if (rval == 3) // boundary
+				break;
+			}
+		}
+	}
+#endif
+
+	class traceCell {
+	public:
+		cell *cell;
+		traceCell *prev;
+		void extractTohistArray(hist & histArray) {
+			int j = 0;
+			traceCell *ptr;
+			histArray.gameCh = cell->val;
+			histArray.hArray[j++] = cell;
+			ptr = prev;
+			while (1) {
+				if (ptr == nullptr)
+				break;
+				if (ptr->cell) {
+					histArray.hArray[j++] = ptr->cell;
+				} else
+				break;
+				ptr = ptr->prev;
+			}
+			histArray.size = j;
+		}
+	};
+
+	void printDebugInfo(int row, int col, traceCell * trace, int depth) {
+		cout << board[row][col];
+//		printf("Play:%C",convertToChar(currPlay));
+		printTrace();
+		int i = depth;
+		do {
+			if (trace->cell)
+			cout << i++ << *(trace->cell) << "->";
+			trace = trace->prev;
+		}while (trace);
+		cout << endl;
+	}
+	void modifyDebugFeatures(int a);
+	cell * inputCell() {
+		int row, col;
+		char ccol, inputstr[20];
+		bool invalid = true;
+		do {
+			cout << "Enter cell:";
+			cin >> inputstr;
+			sscanf(inputstr, "%d%c", &row, &ccol);
+			col = ccol - 'a' + 1;
+			if (((row > 0) && (row < 16)) && ((col > 0) && (col < 16))) {
+				return (&board[row][col]);
+			}
+		}while (invalid);
+	}
 	void clearScore();
-	Line extractLine(int dir, int x, int y);
-	int score1Cell(int setVal, int row, int col, int depth);
-	scoreElement evalAllCell(int val, int width, int depth, int currentWidth,
-			bool maximizingPlayer, breadCrumb &b);
+	Line extractLine( int dir, int x, int y, bool &ending,
+			bool debugThis);
+	aScore score1Cell(const int setVal, const int row, const int col,
+			bool debugThis);
+	scoreElement evalAllCell(int val, int width, int depth, int min_depth,
+			bool maximizingPlayer, aScore alpha, aScore beta, bool debugThis,
+			bool &redo, traceCell * trace, tracer *headTracer);
 	scoreElement terminateScore;
 	cellDebug cdbg;
+	int nextWidth(int depth, int width) {
+		int nw = width - (width / (depth + 1));
+		if (nw <= 0)
+		nw = 1;
+		return (nw);
+	}
 	void reset();
-};
 
+private:
+	int createNodeList(int thisWidth, int in_width, std::vector<scoreElement>& bestScoreArray,
+			int& highestConnected, scoreElement& bestScore);
+	int debugSetup(int thisWidth, int in_depth, int currPlay, bool topLevel, bool debugThis,
+			int terminated, std::vector<scoreElement>& bestScoreArray, debugid& debug,
+			std::vector<scoreElement>& returnScoreArray);
+}
+;
+
+class briefHist {
+	unsigned char *row, *col, *val, *order;
+	int size = 2;
+public:
+
+	briefHist() {
+		size = 80;
+		row = new unsigned char[size + 1];
+		col = new unsigned char[size];
+		val = new unsigned char[size];
+		order = new unsigned char[size];
+		row[0] = 0xff;
+	}
+	briefHist(int size) {
+		row = new unsigned char[size + 1];
+		col = new unsigned char[size];
+		val = new unsigned char[size];
+		order = new unsigned char[size];
+		row[0] = 0xff;
+	}
+	~ briefHist() {
+		delete row;
+		delete col;
+		delete order;
+		delete val;
+	}
+	briefHist & operator =(const hist & c) {
+		int i;
+		for (i = 0; i < c.size; i++) {
+			row[i] = (char) (c.hArray[i]->rowVal);
+			col[i] = (char) (c.hArray[i]->colVal);
+			val[i] = (char) c.hArray[i]->val;
+			order[i] = (char) i;
+		}
+		row[i] = 0xFF;
+		return *this;
+	}
+
+	briefHist & operator =(const tracer & c) {
+		int i = 0;
+		do {
+			row[i] = c.savePoint.cellPtr->rowVal;
+			col[i] = c.savePoint.cellPtr->colVal;
+			val[i] = (char) c.savePoint.cellPtr->val;
+			order[i] = (char) i;
+			i++;
+		} while (c.prev);
+		row[i] = 0xFF;
+
+		return *this;
+	}
+
+	friend ostream & operator <<(ostream &out, const briefHist &c) {
+		int i = 0;
+		while (c.row[i] != 0xFF) {
+			out << (int) c.order[i] << "[" << (int) mapping(c.row[i])
+					<< (char) convertCharToCol(c.col[i]) << "]"
+					<< convertToChar(c.val[i]) << "->";
+			i++;
+		}
+		return out;
+	}
+
+	void addMove(int o, int r, int c, int v) {
+		int i = 0;
+		while (row[i++] != 0xFF)
+			;
+		i--;
+		row[i] = r;
+		col[i] = c;
+		val[i] = v;
+		order[i++] = o;
+		row[i] = 0xFF;
+	}
+
+	void setCell(caro & cr) {
+		int i = 0;
+		while (row[i] != 0xFF) {
+			int r = row[i];
+			int c = col[i];
+			int o = order[i];
+			cr.addMove(o, &cr.board[r][c]);
+			cr.setCell(val[i], r, c, E_FNEAR);
+			i++;
+		}
+
+	}
+	void setCellwithNoOrder(caro & cr) {
+		int i = 0;
+		while (row[i] != 0xFF) {
+			int r = row[i];
+			int c = col[i];
+			cr.setCell(val[i], r, c, E_NEAR);
+			i++;
+		}
+
+	}
+}
+;
 #endif /* CARO_H_ */

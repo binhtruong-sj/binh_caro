@@ -1,0 +1,23 @@
+7 M  b  b  b  b  b  b  b  b  b  b  b  b  b  b  b  b  ROW 0
+ b  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  b  ROW 1
+ b  -  -  -  -  -  -  "  -  -  "  -  -  "  -  -  b  ROW 2
+ b  -  -  -  -  -  -  "  "  "  "  "  "  "  "  "  b  ROW 3
+ b  -  -  -  -  -  "  "  "  "  "  "  "  "  "  "  b  ROW 4
+ b  -  -  -  -  "  "  "  "  -  "  "  -  "  "  -  b  ROW 5
+ b  -  -  -  "  "  "  "  "  -  -  -  "  "  "  "  b  ROW 6
+ b  -  -  -  -  "  "  -  -  -  -  "  "  "  "  "  b  ROW 7
+ b  -  -  -  -  "  -  "  -  -  -  -  "  "  "  "  b  ROW 8
+ b  -  -  -  "  -  "  -  -  -  -  "  "  "  "  "  b  ROW 9
+ b  -  -  -  -  "  "  "  -  -  -  "  "  "  -  "  b  ROW 10
+ b  -  -  -  -  "  "  "  "  "  "  "  "  "  "  -  b  ROW 11
+ b  -  -  -  "  "  "  "  "  "  "  "  "  "  -  -  b  ROW 12
+ b  -  -  -  -  "  -  -  "  -  -  "  -  -  -  -  b  ROW 13
+ b  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  b  ROW 14
+ b  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  b  ROW 15
+ b  b  b  b  b  b  b  b  b  b  b  b  b  b  b  b  b  ROW 16
+ L  A  B  C  D  E  F  G  H  I  J  K  L  M  N  O  P 
+
+1
+-3
+g 0 0 0
+
